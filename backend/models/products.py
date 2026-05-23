@@ -3,7 +3,7 @@ from .users import User
 from sqlalchemy.sql import func
 from database import Base
 
-class product(Base):
+class Product(Base):
     __tablename__ = "products"
 
     product_id = Column(Integer, primary_key=True, index=True)

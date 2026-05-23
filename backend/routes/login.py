@@ -11,4 +11,4 @@ router = APIRouter(
 @router.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db = Depends(get_db)):
 
-    return login_service(form_data,db)
+    return login_service(form_data, db)

@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends
-from services.auth import get_current_user
+from fastapi import APIRouter, Depends, HTTPException
+from services.auth import req_admin
+
 router = APIRouter( 
     tags=["admin"]
 )
 
 @router.post("/admin")
-def admin(current_user : get_current_user = Depends()):
-    if current_user.get('role') != 'admin':
-        return {"Access":"Denied"}
+def admin(
+    current_user = Depends(req_admin)
+):
     
     return current_user

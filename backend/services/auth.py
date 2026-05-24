@@ -27,7 +27,7 @@ def get_current_user(
             401,
             detail="User Not Found"
         )
-    
+    print(user.id)
     return user
 
 def req_admin(

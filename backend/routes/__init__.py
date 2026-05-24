@@ -7,3 +7,4 @@ from .create_product import router as create_product_router
 from .delete_product import router as delete_product_router
 from .update_product import router as update_product_router
 from .route import router as route
+from .get_cart import router as cart

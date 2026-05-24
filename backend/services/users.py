@@ -40,12 +40,12 @@ def signup_service(user, db):
         )
     
     except Exception:
-         db.rollback()
+        db.rollback()
 
-         raise HTTPException(
+        raise HTTPException(
             status_code=500,
             detail="Internal Server Error"
-         )
+        )
     
     token = {"sub":db_user.id,"username":db_user.username}
 

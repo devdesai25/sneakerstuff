@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, Float, Integer, Boolean, ForeignKey, DateTime
-from .users import User
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from .users import User
 from database import Base
 
 class Product(Base):
@@ -18,3 +19,5 @@ class Product(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     created_by = Column(Integer, ForeignKey("users.id"),nullable=False)
+
+    images = Column(String, nullable= False)

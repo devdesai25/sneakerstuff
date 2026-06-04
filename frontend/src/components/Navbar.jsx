@@ -13,7 +13,7 @@ function Navbar() {
             {isLoggedIn && (
                 <>
                     < Link to="/admin">Admin</Link>
-                    
+                    < Link to="/cart">Cart</Link>
                     < button onClick={() => {
                         localStorage.removeItem("token");
                         setIsLoggedIn(false);

@@ -1,8 +1,9 @@
 from database import  Base
 from sqlalchemy.sql import func
 from sqlalchemy import String, Integer, ForeignKey,DateTime, Column, UniqueConstraint
+from sqlalchemy.orm import relationship
 
-class Cart(Base):
+class CartItem(Base):
     
     __tablename__ = "cart_items"
 
@@ -23,3 +24,5 @@ class Cart(Base):
             name="unique_user_product"
         )
     )
+    
+    product = relationship("Product", back_populates="cart_items")

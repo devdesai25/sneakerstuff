@@ -21,3 +21,5 @@ class Product(Base):
     created_by = Column(Integer, ForeignKey("users.id"),nullable=False)
 
     images = Column(String, nullable= False)
+
+    cart_items = relationship("CartItem", back_populates="product")

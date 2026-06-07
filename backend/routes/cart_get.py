@@ -17,4 +17,12 @@ def get_cart(
     
     cart = db.query(CartItem).filter(CartItem.user_id == user.id).all()
     
-    return cart
+    return [{
+        "product_id": item.product.product_id,
+        "name": item.product.name,
+        "price": item.product.price,
+        "image": item.product.images,
+        "quantity": item.quantity
+    }
+    for item in cart
+    ]

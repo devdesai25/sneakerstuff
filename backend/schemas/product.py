@@ -16,6 +16,7 @@ class ProductUpdate(BaseModel):
     stock : Optional[int] = None
     price : Optional[float] = None
     images: str | None = None
+    
 class ProductCreate(BaseModel):
 
     name : str

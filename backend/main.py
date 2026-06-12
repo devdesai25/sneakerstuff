@@ -13,7 +13,9 @@ from routes import (cart,
                     route,
                     create_cart_router,
                     patch_cart_router,
-                    delete_cart_router
+                    delete_cart_router,
+                    create_order_router,
+                    get_order_router
                 )
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
@@ -42,7 +44,8 @@ app.include_router(cart)
 app.include_router(create_cart_router)
 app.include_router(patch_cart_router)
 app.include_router(delete_cart_router)
-
+app.include_router(create_order_router)
+app.include_router(get_order_router)
 handler = Mangum(app)
 """
 from fastapi import FastAPI

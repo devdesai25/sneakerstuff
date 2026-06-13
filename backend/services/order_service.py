@@ -158,3 +158,111 @@ def orderCreate(address, user, db):
             for item in new_order.order_items
         ]
     }
+
+def orderPay(id, user, db):
+
+    order = (
+        db.query(Order)
+        .filter(Order.order_id == id, Order.user_id == user.id)
+        .first()
+    )
+
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Order Not found"
+        )
+    
+    if datetime.utcnow() > order.expiry_at:
+        order.status = "Expired"
+        db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Order has Expired"
+        )
+
+    if order.status != "Pending":
+        raise HTTPException(
+            status_code=422,
+            detail="Unprocessable entity"
+        )
+
+    try:
+        order.status = "Paid"
+        order.paid_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(order)
+
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Database integrity error"
+        )
+    
+    except Exception:
+        db.rollback()
+        raise
+
+    return {
+        "order_id":order.order_id,
+        "status":order.status,
+        "paid_at":order.paid_at,
+        "amount":order.total_amount, 
+        "address":order.address
+    }
+
+def orderCancel(id, user, db):
+
+    order = (
+        db.query(Order)
+        .filter(Order.order_id == id, Order.user_id == user.id)
+        .first()
+    )
+
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Order Not Found"
+        )
+
+    if datetime.utcnow() > order.expiry_at:
+        order.status = "Expired"
+        db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Order has Expired"
+        )
+
+    if order.status != "Pending":
+        raise HTTPException(
+            status_code=422,
+            detail="Unprocessable entity"
+        )
+    
+    try:
+        order.status = "Cancelled"
+
+        db.commit()
+        db.refresh(order)
+    
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Database integrity error"
+        )
+    
+    except Exception:
+        db.rollback()
+        raise
+    
+    return {
+        "order_id":order.order_id,
+        "status":order.status,
+        "amount":order.total_amount,
+        "address":order.address 
+    }

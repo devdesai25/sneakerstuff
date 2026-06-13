@@ -1,24 +1,16 @@
 from fastapi import FastAPI
 from config import settings
 from database import engine, Base, metadata
-from routes import (cart,
-                    login_router,
-                    get_products_router, 
-                    signup_router, 
+from routes import (
+                    auth_router,
                     me_router, 
-                    admin_router, 
-                    create_product_router, 
-                    delete_product_router, 
-                    update_product_router, 
-                    route,
-                    create_cart_router,
-                    patch_cart_router,
-                    delete_cart_router,
-                    create_order_router,
-                    get_order_router
+                    product_router,
+                    cart_router,
+                    order_router,
                 )
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
@@ -31,21 +23,11 @@ app.add_middleware(
     allow_methods = ["*"]
 )
 
-app.include_router(login_router)
-app.include_router(get_products_router)
-app.include_router(signup_router)
+app.include_router(auth_router)
 app.include_router(me_router)
-app.include_router(admin_router)
-app.include_router(create_product_router)
-app.include_router(delete_product_router)
-app.include_router(update_product_router)
-app.include_router(route)
-app.include_router(cart)
-app.include_router(create_cart_router)
-app.include_router(patch_cart_router)
-app.include_router(delete_cart_router)
-app.include_router(create_order_router)
-app.include_router(get_order_router)
+app.include_router(product_router)
+app.include_router(cart_router)
+app.include_router(order_router)
 handler = Mangum(app)
 """
 from fastapi import FastAPI

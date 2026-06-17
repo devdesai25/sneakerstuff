@@ -16,7 +16,7 @@ def get_order(
     
     return orderGet(user, db)
 
-@router.post("/checkout")
+@router.post("/orders")
 def create_order(
     address: OrderRequest,
     user: User = Depends(get_current_user),
@@ -33,7 +33,7 @@ def pay_order(
 
     return orderPay(id, user, db)
 
-@router.patch("/oders/{id}/cancel")
+@router.patch("/orders/{id}/cancel")
 def cancel_order(
     id:int,
     user:User=Depends(get_current_user),

@@ -8,7 +8,7 @@ function Home(){
 
     const fetchProducts = async () => {
         try{
-            const res = await api.get("/products")    
+            const res = await api.get("/admin/products")    
             setProduct(res.data);
         }catch(error){
             console.log("Error fetching products",error)

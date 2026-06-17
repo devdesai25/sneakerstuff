@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
+import {useNavigate} from "react-router-dom";
 import api from "../services/api";
+import { createOrder} from "../services/orderApi";
 
 function Cart() {
   const [cart, setCart] = useState([]);
+  const [address, setAddress] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchCart();
@@ -58,7 +62,20 @@ function Cart() {
     } catch(error){
       console.log(error);
     }
-  } 
+  }
+  
+  const orderItems = async(address) => {
+    try{
+      const res = await createOrder(address);
+
+      await fetchCart();
+      
+      navigate("/orders");
+      
+    } catch(error) {
+      console.log(error);
+    }
+  }
 
   return (
     <div>
@@ -122,47 +139,21 @@ function Cart() {
       ))}
 
       <h2>Total: ₹{total}</h2>
+      <input 
+      type="text"
+      value={address}
+      onChange={(e)=>setAddress(e.target.value)}
+      placeholder="Enter Delivery Address"
+      />
+      <button onClick={()  => orderItems(address) }
+        style={{
+        marginLeft: "20px"
+      }}
+      >
+        Order
+      </button>
     </div>
   );
 }
 
 export default Cart;
-/*import { useState, useEffect } from "react";
-import api from "../services/api";
-
-function Cart(){
-    const [cartItems, setCartItems] = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    const fetchCart = async () => {
-        try{
-            const res = await api.get("/cart");
-            setCartItems(res.data);
-        } catch(error){
-            console.log(error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(()=>{
-        fetchCart();
-    }, []);
-
-    return (
-    <div>
-        <h1>Shopping Cart</h1>
-
-        {cartItems.map((item)=> {
-            <div key={item.product_id}>
-                <img src={item.image} />
-                <h3>{item.name}</h3>
-                <p>{item.price}</p>
-                <p>Subtotal: $ {item.price * item.quantity}</p>
-            </div>
-        })}
-        <h2>Total</h2>
-    </div>)
-}
-
-export default Cart;*/

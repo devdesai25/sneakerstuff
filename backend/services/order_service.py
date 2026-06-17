@@ -211,7 +211,6 @@ def orderPay(id, user, db):
         db.commit()
         db.refresh(order)
 
-        db.delete()
 
     except IntegrityError:
         db.rollback()

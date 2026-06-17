@@ -83,7 +83,7 @@ def productUpdate(id: int, update_product, db):
     
     """Skip fields client hasnt sent"""
     """Convert Pydantic model to dict, only with fields client sent"""
-    update_data = update_product.model_dumps(exclude_unset=True)
+    update_data = update_product.model_dump(exclude_unset=True)
 
     for key, value in update_data().items():
         if hasattr(product, key):

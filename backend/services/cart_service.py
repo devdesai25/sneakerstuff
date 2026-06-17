@@ -52,7 +52,7 @@ def cartAdd(
             db.rollback()
             
             raise HTTPException(
-                status=409,
+                status_code=409,
                 detail="Database Integrity Error"
             )
         

@@ -4,8 +4,19 @@ from models.cart_items import CartItem
 from models.order import Order
 from models.order_items import OrderItem
 from models.products import Product
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
+def restore_stock(order, db):
+
+    for item in order.order_items:
+
+        product = (
+            db.query(Product)
+            .filter(Product.product_id == item.product_id)
+            .first()
+        )
+
+        product.stock += item.quantity
 
 def orderGet(user, db):
 
@@ -82,7 +93,7 @@ def orderCreate(address, user, db):
                     detail="Product not found"
                 )
 
-            if product.quantity < cart_item.quantity:
+            if product.stock < cart_item.quantity:
                 raise HTTPException(
                     status_code=422,
                     detail="Insufficient stock"
@@ -91,7 +102,7 @@ def orderCreate(address, user, db):
             subtotal = product.price * cart_item.quantity
 
             total_amount += subtotal
-            product.quantity -= cart_item.quantity
+            product.stock -= cart_item.quantity
 
             products[cart_item.product_id] = product
 
@@ -173,10 +184,15 @@ def orderPay(id, user, db):
             detail="Order Not found"
         )
     
-    if datetime.utcnow() > order.expiry_at:
+    if (
+        order.status == "Pending" 
+        and datetime.now(timezone.utc) > order.expires_at
+    ):  
+        restore_stock(order, db)
         order.status = "Expired"
         db.commit()
 
+    if order.status == "Expired":
         raise HTTPException(
             status_code=400,
             detail="Order has Expired"
@@ -194,6 +210,8 @@ def orderPay(id, user, db):
 
         db.commit()
         db.refresh(order)
+
+        db.delete()
 
     except IntegrityError:
         db.rollback()
@@ -228,10 +246,15 @@ def orderCancel(id, user, db):
             detail="Order Not Found"
         )
 
-    if datetime.utcnow() > order.expiry_at:
+    if (datetime.now(timezone.utc) > order.expires_at
+        and order.status == "Pending"
+    ):
+        restore_stock(order, db)
+
         order.status = "Expired"
         db.commit()
 
+    if order.status == "Expired":
         raise HTTPException(
             status_code=400,
             detail="Order has Expired"
@@ -244,6 +267,7 @@ def orderCancel(id, user, db):
         )
     
     try:
+        restore_stock(order, db)
         order.status = "Cancelled"
 
         db.commit()

@@ -1,4 +1,4 @@
-from database import  Base
+from backend.database import Base
 from sqlalchemy.sql import func
 from sqlalchemy import String, Integer, ForeignKey,DateTime, Column, UniqueConstraint
 from sqlalchemy.orm import relationship
@@ -22,7 +22,7 @@ class CartItem(Base):
             "user_id",
             "product_id",
             name="unique_user_product"
-        )
+        ),
     )
     
     product = relationship("Product", back_populates="cart_items")

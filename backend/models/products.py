@@ -1,9 +1,8 @@
+from backend.database import Base
 from sqlalchemy import Column, String, Float, Integer, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .users import User
-from database import Base
-
 class Product(Base):
     __tablename__ = "products"
 
@@ -24,3 +23,4 @@ class Product(Base):
 
     cart_items = relationship("CartItem", back_populates="product")
     order_items = relationship("OrderItem", back_populates="product", cascade="all, delete-orphan")
+    drops = relationship("Drop", back_populates="product")

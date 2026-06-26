@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
-from config import settings
+from backend.config import settings
 
 metadata = MetaData()
 engine  = create_engine( settings.DATABASE_URL )

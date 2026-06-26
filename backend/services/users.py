@@ -1,8 +1,8 @@
-from database import get_db
-from models.users import User
 from fastapi import HTTPException
-from auth.jwt import hash_password, encode, verify, encode
 from sqlalchemy.exc import IntegrityError
+from backend.database import get_db
+from backend.models.users import User
+from backend.auth.jwt import hash_password, encode, verify, encode
 
 def signup_service(user, db):
            

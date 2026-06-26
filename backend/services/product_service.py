@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException
-from models.products import Product
-from models.users import User
 from sqlalchemy.exc import IntegrityError
+from backend.models.products import Product
+from backend.models.users import User
 
 def productadd(cur_product, admin,db):
     """Create a new product with duplicate check"""

@@ -1,11 +1,22 @@
 from fastapi import APIRouter, Depends
-from services.product_service import productadd, productDelete, productUpdate
-from services.auth import req_admin
-from schemas.product import ProductCreate, ProductResponse, ProductUpdate
+
 from sqlalchemy.orm import Session
-from models.users import User
-from models.products import Product
-from database import get_db
+from backend.database import get_db
+from backend.schemas.product import (
+    ProductCreate, 
+    ProductResponse, 
+    ProductUpdate
+)
+from backend.models.users import User
+from backend.models.products import Product
+from backend.services.auth import req_admin
+from backend.services.product_service import (
+    productadd, 
+    productDelete, 
+    productUpdate
+)
+
+
 
 router = APIRouter(
     prefix="/admin",

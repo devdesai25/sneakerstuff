@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 class ProductResponse(BaseModel):
@@ -7,9 +7,9 @@ class ProductResponse(BaseModel):
     description: str
     price : float
     images: str | None = None
-    class config:
-        orm_mode = True
-
+    
+    model_config = ConfigDict(from_attributes=True)
+    
 class ProductUpdate(BaseModel):
     name : Optional[str] = None
     description : Optional[str] = None

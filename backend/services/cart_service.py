@@ -1,8 +1,8 @@
 from fastapi import HTTPException
-from models.products import Product
-from models.cart_items import CartItem
 from sqlalchemy import and_
 from sqlalchemy.exc import IntegrityError
+from backend.models.products import Product
+from backend.models.cart_items import CartItem
 
 def cartAdd(
         cur_cart,

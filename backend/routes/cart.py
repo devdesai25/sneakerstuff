@@ -1,11 +1,22 @@
 from fastapi import APIRouter, Depends
-from database import get_db
-from schemas.cart_items import CartResponse, CartCreate, CartPatch
+
+from backend.schemas.cart_items import CartResponse, CartCreate, CartPatch
 from sqlalchemy.orm import Session
-from models.cart_items import CartItem
-from services.auth import get_current_user
-from services.cart_service import cartAdd, cartDelete, cartPatch
-from models.users import User
+from backend.database import get_db
+from backend.models.cart_items import CartItem
+from backend.models.users import User
+from backend.schemas.cart_items import (
+    CartResponse, 
+    CartCreate, 
+    CartPatch
+)
+from backend.services.auth import get_current_user
+from backend.services.cart_service import (
+    cartAdd, 
+    cartDelete, 
+    cartPatch
+)
+
 
 router = APIRouter(
     tags=["userCart"])

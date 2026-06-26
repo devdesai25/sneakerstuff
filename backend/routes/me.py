@@ -1,6 +1,7 @@
 from fastapi import APIRouter,Depends
-from services.auth import get_current_user
-from models.users import User
+from backend.services.auth import get_current_user
+from backend.models.users import User
+
 router = APIRouter(
     tags=["mepage"]
 )

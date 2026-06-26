@@ -1,7 +1,7 @@
+from backend.database import Base
 from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from database import Base
 
 class Order(Base):
     __tablename__ = "orders"
@@ -39,3 +39,14 @@ class Order(Base):
         back_populates="order", 
         cascade="all, delete-orphan"
         )
+    
+    reservation = relationship(
+        "Reservation",
+        back_populates="order",
+        uselist=False
+    )
+
+    user = relationship(
+        "User",
+        back_populates="orders"
+    )

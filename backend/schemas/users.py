@@ -1,5 +1,6 @@
 from pydantic import BaseModel
-from models.users import User
+from backend.models.users import User
+
 class UserLogin(BaseModel):
     username :str
     password :str

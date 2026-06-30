@@ -1,4 +1,5 @@
 from fastapi import APIRouter,Depends
+
 from backend.services.auth import get_current_user
 from backend.models.users import User
 
@@ -7,7 +8,7 @@ router = APIRouter(
 )
 
 @router.get("/me")
-def get_me(
+async def get_me(
     current_user : User = Depends(get_current_user)
 ):
-    return current_user
+    return await current_user

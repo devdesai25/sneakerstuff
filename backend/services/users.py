@@ -1,97 +1,97 @@
 from fastapi import HTTPException
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from backend.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.auth.jwt import hash_password, encode, verify
 from backend.models.users import User
-from backend.auth.jwt import hash_password, encode, verify, encode
+from backend.schemas.users import UserSignup
 
-def signup_service(user, db):
-           
-    db_user = (
-        db.query(User)
-        .filter(User.username == user.username)
-        .first()
+async def signup_service(user: User, db: AsyncSession):  
+    existing_user = (
+        await db.execute(
+            select(User).where(User.username == user.username)
         )
+    ).scalar_one_or_none()
     
-    if db_user:
-
+    if existing_user:
         raise HTTPException(
             status_code=409,
             detail="Username already there"
         )
-    
-    hashed_pass = hash_password(user.password)
 
-    db_user = User(
+    new_user = User(
         username = user.username, 
-        hashed_password = hashed_pass
+        hashed_password = hash_password(user.password)
     )
 
     try:
-        db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
     
     except IntegrityError:
-        db.rollback()
-
+        await db.rollback()
         raise HTTPException(
             status_code=409,
             detail="Database Integrity Error"
         )
     
     except Exception:
-        db.rollback()
-
+        await db.rollback()
         raise HTTPException(
             status_code=500,
             detail="Internal Server Error"
         )
-    
-    token = {"sub":db_user.id,"username":db_user.username}
 
-    access_token = encode(token)
+    access_token = encode(
+         {
+         "sub": str(new_user.id),
+         "username": new_user.username
+        }
+    )
 
     return (
         {
             "access_token": access_token,
             "token_type": "bearer",
             "user":{
-                "id" : db_user.id,
-                "username": db_user.username,
-                "role": db_user.role 
+                "id" : new_user.id,
+                "username": new_user.username,
+                "role": new_user.role 
             }
         }
     )
 
 
-def login_service(user, db):
+async def login_service(form_data: OAuth2PasswordRequestForm, db: AsyncSession):
     
-    db_user = (
-        db.query(User)
-        .filter(User.username == user.username)
-        .first()
+    existing_user = (
+        await db.execute(
+            select(User).where(User.username == form_data.username)
         )
-    
-    if not db_user:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid Password or Username"
-                )
+    ).scalar_one_or_none()
+        
+    if not existing_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Password or Username"
+        )
             
-    if not verify(user.password, db_user.hashed_password):
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid Password Or Username"
-                )
-        
-    user_id = db_user.id 
-        
+    if not verify(form_data.password, existing_user.hashed_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Password Or Username"
+        )
+     
     access_token = encode({
-                "sub":str(user_id),
-                "username":db_user.username
-            })
+        "sub":str(existing_user.id),
+        "username":existing_user.username
+        }
+    )
 
     return {
-            "access_token":access_token,
-            "token_type":"bearer"
-        }
+        "access_token":access_token,
+        "token_type":"bearer"
+    }

@@ -12,7 +12,7 @@ from backend.routes import (
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
-Base.metadata.create_all(bind=engine)
+#Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 

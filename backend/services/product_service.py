@@ -1,15 +1,26 @@
 from fastapi import Depends, HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+
 from backend.models.products import Product
 from backend.models.users import User
+from backend.models.drops import Drop
+from backend.schemas.product import ProductCreate, ProductUpdate, ProductResponse
+from backend.helpers.product_helpers import get_product_or_404
 
-def productadd(cur_product, admin,db):
+async def product_add(
+    new_product: ProductCreate, 
+    admin: User,
+    db: AsyncSession
+) -> ProductResponse:
     """Create a new product with duplicate check"""
     product = (
-        db.query(Product)
-        .filter(Product.name == cur_product.name)
-        .first()
-    )
+        await db.execute(
+            select(Product)
+            .where(Product.name == new_product.name)
+        )
+    ).scalar_one_or_none()
 
     if product :
         raise HTTPException(
@@ -18,89 +29,94 @@ def productadd(cur_product, admin,db):
         )
 
     add_prod = Product(
-        name = cur_product.name, 
-        description = cur_product.description, 
-        price = cur_product.price, 
-        stock = cur_product.stock, 
+        name = new_product.name, 
+        description = new_product.description, 
+        price = new_product.price, 
+        stock = new_product.stock, 
         created_by = admin.id,
-        images = cur_product.images
+        images = new_product.images
     ) 
     
     try:
         db.add(add_prod)
-        db.commit()
-        db.refresh(add_prod)
+        await db.commit()
+        await db.refresh(add_prod)
 
     except IntegrityError:
-        db.rollback()
-
+        await db.rollback()
         raise HTTPException(
             409,
             detail="Database Integrity Error"
         )
-    
+    except Exception:
+        await db.rollback()
+        raise
     return add_prod
 
-def productDelete(id: int, db):
+async def product_delete(
+    product_id: int, 
+    db: AsyncSession
+) -> dict :
     """Delete a product"""
-    product = (
-        db.get(Product, id)
-    )
-
-    if not product:
-        raise HTTPException(
-            status_code=404,
-            detail="Product Not Found"
-        )
+    product = await get_product_or_404(product_id, db)
     
+    drop = (
+        await db.execute(
+            select(Drop.product_id == product.product_id)
+        )
+    ).scalars().all()
+
+    if drop:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot delete a product that is used in a drop"
+        )
     try:
-        db.delete(product)
-        db.commit()
+        await db.delete(product)
+        await db.commit()
 
     except IntegrityError:
-        db.rollback()
-        
+        await db.rollback()
         raise HTTPException(
             status_code=409,
             detail="Database Integrity Error"
         )
     
+    except Exception:
+        await db.rollback()
+        raise
     return {
         "message": "Product deleted successfully"
     }
 
-def productUpdate(id: int, update_product, db):
+async def product_update(
+    product_id: int, 
+    update_product: ProductUpdate, 
+    db: AsyncSession
+) -> ProductResponse:
     """Update a product"""
-    product = (
-        db.get(Product, id)
-    )
+    product = await get_product_or_404(product_id, db)
 
-    if not product:
-        raise HTTPException(
-            status_code=404,
-            detail="Product Not Found"
-        )
-    
     """Skip fields client hasnt sent"""
     """Convert Pydantic model to dict, only with fields client sent"""
     update_data = update_product.model_dump(exclude_unset=True)
 
-    for key, value in update_data().items():
-        if hasattr(product, key):
+    for key, value in update_data.items():
             setattr(product, key, value)
     
     try:
-        db.commit()
-        db.refresh(product)
+        await db.commit()
+        await db.refresh(product)
     
     except IntegrityError:
-        db.rollback()
-
+        await db.rollback()
         raise HTTPException(
             status_code=409,
             detail="Database Integrity Error"
         )
     
-    return {
-        "message": "Product Updated Successfully"
-    }
+    except Exception:
+        await db.rollback()
+        raise
+    
+    return product

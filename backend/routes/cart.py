@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.schemas.cart_items import CartResponse, CartCreate, CartPatch
-from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models.cart_items import CartItem
 from backend.models.users import User
@@ -22,12 +24,18 @@ router = APIRouter(
     tags=["userCart"])
 
 @router.get("/cart", response_model= list[CartResponse])
-def get_cart(
-    db: Session = Depends(get_db), 
+async def get_cart(
+    db: AsyncSession = Depends(get_db), 
     user: User = Depends(get_current_user)
 ):
     
-    cart = db.query(CartItem).filter(CartItem.user_id == user.id).all()
+    result = await db.execute(
+        select(CartItem)
+        .where(CartItem.user_id == user.id)
+        .options(selectinload(CartItem.product))
+    )
+    
+    cart = result.scalars().all()
     
     return [{
         "product_id": item.product.product_id,
@@ -40,25 +48,29 @@ def get_cart(
     ]
 
 @router.post("/cart")
-def create_cart(
+async def create_cart(
     cart: CartCreate,
     user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
     ):
 
-    return cartAdd(cart, user, db)
+    return await cartAdd(cart, user, db)
 
 @router.delete("/cart/{id}")
-def delete_cart(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def delete_cart(
+    id: int, 
+    user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
     
-    return  cartDelete(id, user, db)
+    return await cartDelete(id, user, db)
 
 @router.patch("/cart/{id}")
-def patch_cart(
+async def patch_cart(
     id: int, 
     cart: CartPatch, 
     user: User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     
-    return cartPatch(id, cart, user, db)
+    return await cartPatch(id, cart, user, db)

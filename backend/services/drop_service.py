@@ -1,21 +1,30 @@
 from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+
 from backend.models.drops import Drop
 from backend.models.products import Product
+from backend.schemas.drops import DropCreate
+from backend.enums.drop_status import DropStatus
+from backend.tasks.drop_tasks import activate_drop, close_drop
+from backend.helpers.drop_helpers import get_drop_or_404, drop_get
 
-def dropGet(db):
-    drop = db.query(Drop).all()
-    
-    return drop
-
-
-def dropCreate(drop, db):
+async def drop_create(
+    drop_data: DropCreate, 
+    db: AsyncSession
+) -> Drop:
 
     product = (
+        await db.execute(
+            select(Product).where(Product.product_id == drop_data.product_id)
+        )
+    ).scalar_one_or_none()
+    """(
         db.query(Product)
-        .filter(Product.product_id == drop.product_id)
+        .filter(Product.product_id == drop_data.product_id)
         .first()
-    )    
+    )    """
 
     if not product:
         raise HTTPException(
@@ -23,15 +32,13 @@ def dropCreate(drop, db):
             detail="Product Not Found"
         )
     
-    if product.stock < drop.drop_inventory:
+    if product.stock < drop_data.drop_inventory:
         raise HTTPException(
             status_code=422,
             detail="Infsufficient Stock"
         )
     
-    if (drop.closes_at < drop.opens_at
-        or drop.opens_at >drop.closes_at
-    ) :
+    if drop_data.opens_at >= drop_data.closes_at:
         raise HTTPException(
             status_code=422,
             detail="Unprocessable Entity"
@@ -39,34 +46,171 @@ def dropCreate(drop, db):
     
     try:
         new_drop = Drop(
-            product_id = drop.product_id,
-            opens_at = drop.opens_at,
-            closes_at = drop.closes_at,
-            drop_inventory = drop.drop_inventory,
-            status = "DRAFT"
+            product_id = drop_data.product_id,
+            opens_at = drop_data.opens_at,
+            closes_at = drop_data.closes_at,
+            drop_inventory = drop_data.drop_inventory,
+            status = DropStatus.DRAFT
         )
+
         db.add(new_drop)
-        db.commit()
-        db.refresh(new_drop)
+        await db.commit()
+        await db.refresh(new_drop)
 
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=409,
             detail="Database Integrity Error"
         )
     
     except Exception:
-        db.rollback()
+        await db.rollback()
         raise
 
-    return {
-       "drop_id": new_drop.drop_id,
-       "product_id": new_drop.product_id,
-       "product_name": new_drop.product.name,
-       "status": new_drop.status,
-       "opens_at": new_drop.opens_at,
-       "closes_at": new_drop.closes_at,
-       "created_at": new_drop.created_at,
-       "drop_inventory": new_drop.drop_inventory 
-    }
+    return new_drop
+
+async def drop_update(
+    drop_id: int, 
+    drop_data: DropCreate, 
+    db:AsyncSession
+)-> Drop:
+
+    drop = await get_drop_or_404(drop_id, db)
+    
+    if drop.status != DropStatus.DRAFT:
+        raise HTTPException(
+            status_code = 400,
+            detail = "Invalid state transition"
+        )
+    
+    try:
+        update_data = drop_data.model_dump(exclude_unset=True)
+
+        for key,value in update_data.items():
+            if hasattr(drop, key):
+                setattr(drop, key, value)
+
+        if drop.opens_at >= drop.closes_at:
+            raise HTTPException(
+                status_code=422,
+                detail="Unprocessable Entity"
+            )
+             
+        await db.commit()
+        await db.refresh(drop)
+
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Database Integrity Error"
+        )
+    
+    except Exception:
+        await db.rollback()
+        raise
+
+    return drop
+
+async def drop_delete(
+    drop_id: int, 
+    db: AsyncSession
+) -> Drop:
+    
+    drop = await get_drop_or_404(drop_id, db)
+    
+    if drop.status != DropStatus.DRAFT:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid state transition"
+        )
+    
+    try:
+        await db.delete(drop)
+        await db.commit()
+    
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Database Integrity Error"
+        )
+    
+    except Exception:
+        await db.rollback()
+        raise
+    
+    return drop
+
+async def drop_cancel(
+    drop_id: int, 
+    db: AsyncSession
+) -> Drop:
+    
+    drop = await get_drop_or_404(drop_id, db)
+
+    if drop.status != DropStatus.DRAFT:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid state transition"
+        )
+    
+    try:
+        drop.status = DropStatus.CANCELLED
+        await db.commit()
+        await db.refresh(drop)
+
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Database Integrity Error"
+        )
+    
+    except Exception:
+        await db.rollback()
+        raise
+
+    return drop
+
+async def drop_publish(
+    drop_id: int, 
+    db: AsyncSession
+) -> Drop:
+    
+    drop = await get_drop_or_404(drop_id, db)
+
+    if drop.status != DropStatus.DRAFT:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid state transition"
+        )
+    
+    try:
+        drop.status = DropStatus.SCHEDULED        
+        await db.commit()
+        await db.refresh(drop)
+        
+        activate_drop.apply_async(
+            args=[drop.drop_id],
+            eta=drop.opens_at,
+        )
+
+        close_drop.apply_async(
+            args=[drop.drop_id],
+            eta=drop.closes_at,
+        )
+    
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Database Integrity Error"
+        )
+    
+    except Exception:
+        await db.rollback()
+        raise
+    
+    return drop

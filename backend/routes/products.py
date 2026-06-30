@@ -1,26 +1,24 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy.orm import Session
 from backend.database import get_db
+from backend.services.auth import req_admin
+from backend.models.users import User
+from backend.models.products import Product
 from backend.schemas.product import (
     ProductCreate, 
     ProductResponse, 
     ProductUpdate
 )
-from backend.models.users import User
-from backend.models.products import Product
-from backend.services.auth import req_admin
 from backend.services.product_service import (
-    productadd, 
-    productDelete, 
-    productUpdate
+    product_add, 
+    product_delete, 
+    product_update
 )
 
-
-
 router = APIRouter(
-    prefix="/admin",
-    tags=["Create"]
+    tags=["Product"]
 )
 
 @router.get("/")
@@ -28,40 +26,46 @@ def home():
     return {"message":"backend connected"}
 
 @router.get("/products", response_model= list[ProductResponse])
-def get_products(
-    limit : int = 10, 
-    offset : int = 0,
-    db: Session = Depends(get_db )
+async def get_products(
+    limit: int = 10, 
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db )
 ):
     
-    all_prod = db.query(Product).offset(offset).limit(limit).all()
-    
+    all_prod = (
+        await db.execute(
+            select(Product)
+            .offset(offset)
+            .limit(limit)
+        )
+    ).scalars().all()
+
     return all_prod
 
-@router.post("/create")
-def create_product(
-    cur_product : ProductCreate,
-    admin : User = Depends(req_admin), 
-    db : Session = Depends(get_db)
+@router.post("/admin/create", response_model = ProductResponse)
+async def create_product(
+    new_product: ProductCreate,
+    admin: User = Depends(req_admin), 
+    db: AsyncSession = Depends(get_db)
 ):
     
-    return productadd(cur_product, admin, db)
+    return await product_add(new_product, admin, db)
 
-@router.delete("/delete/{id}")
-def delete_prod(
-    id : int,
-    admin : User = Depends(req_admin),
-    db : Session =  Depends(get_db)
+@router.delete("/admin/delete/{product_id}")
+async def delete_prod(
+    product_id: int,
+    admin: User = Depends(req_admin),
+    db: AsyncSession =  Depends(get_db)
 ):
 
-    return productDelete(id, db)
+    return await product_delete(product_id, db)
 
-@router.patch("/update/{id}")
-def update_product(
-    id : int ,
-    cur_update : ProductUpdate,
-    admin : User = Depends(req_admin), 
-    db : Session = Depends(get_db)
+@router.patch("/admin/update/{product_id}", response_model = ProductResponse)
+async def update_product(
+    product_id: int ,
+    cur_update: ProductUpdate,
+    admin: User = Depends(req_admin), 
+    db: AsyncSession = Depends(get_db)
 ):
 
-    return productUpdate(id, cur_update, db)
+    return await product_update(product_id, cur_update, db)

@@ -1,0 +1,13 @@
+from enum import Enum
+
+class DropStatus(str, Enum):
+    DRAFT = "DRAFT"
+    SCHEDULED = "SCHEDULED"
+    ENTRY_OPEN = "ENTRY_OPEN"
+    ENTRY_CLOSED = "ENTRY_CLOSED"
+    SELECTING = "SELECTING"
+    CLAIMING = "CLAIMING"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+    PAUSED = "PAUSED"
+        

@@ -16,7 +16,7 @@ import { motion } from "framer-motion";
 import { AuthContext } from "../context/AuthContext";
 import { useToast } from "../components/common/Toast";
 import api from "../services/api";
-import { LogIn, Mail, Lock } from "lucide-react";
+import { LogIn, Mail, Lock, Eye, EyeOff } from "lucide-react";
 
 // Form validation schema using Zod
 const loginSchema = z.object({
@@ -29,6 +29,7 @@ export default function Login() {
   const toast = useToast();
   const { login } = useContext(AuthContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Setup React Hook Form with Zod schema resolver
   const {
@@ -109,13 +110,21 @@ export default function Login() {
             <div style={inputWrapperStyle}>
               <Lock size={16} style={inputIconStyle} />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 className="input-field"
                 placeholder="Enter password"
-                style={{ paddingLeft: "42px" }}
+                style={{ paddingLeft: "42px", paddingRight: "42px" }}
                 {...register("password")}
                 disabled={isSubmitting}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={togglePasswordBtnStyle}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
             {errors.password && <span style={errorTextStyle}>{errors.password.message}</span>}
           </div>
@@ -258,4 +267,17 @@ const footerStyle = {
 const linkStyle = {
   color: "var(--accent-red)",
   fontWeight: "700",
+};
+
+const togglePasswordBtnStyle = {
+  position: "absolute",
+  right: "14px",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  color: "#888888",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "4px",
 };

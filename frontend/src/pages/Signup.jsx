@@ -16,7 +16,7 @@ import { motion } from "framer-motion";
 import { AuthContext } from "../context/AuthContext";
 import { useToast } from "../components/common/Toast";
 import api from "../services/api";
-import { UserPlus, User, Mail, Lock, ShieldCheck } from "lucide-react";
+import { UserPlus, User, Mail, Lock, ShieldCheck, Eye, EyeOff } from "lucide-react";
 
 // Form validation schema using Zod
 const signupSchema = z
@@ -39,6 +39,8 @@ export default function Signup() {
   const toast = useToast();
   const { login } = useContext(AuthContext);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   // Setup React Hook Form with Zod schema resolver
   const {
@@ -132,13 +134,21 @@ export default function Signup() {
             <div style={inputWrapperStyle}>
               <Lock size={16} style={inputIconStyle} />
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 className="input-field"
                 placeholder="Min. 6 characters"
-                style={{ paddingLeft: "42px" }}
+                style={{ paddingLeft: "42px", paddingRight: "42px" }}
                 {...register("password")}
                 disabled={isSubmitting}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={togglePasswordBtnStyle}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
             {errors.password && <span style={errorTextStyle}>{errors.password.message}</span>}
           </div>
@@ -149,13 +159,21 @@ export default function Signup() {
             <div style={inputWrapperStyle}>
               <ShieldCheck size={16} style={inputIconStyle} />
               <input
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
                 className="input-field"
                 placeholder="Repeat password"
-                style={{ paddingLeft: "42px" }}
+                style={{ paddingLeft: "42px", paddingRight: "42px" }}
                 {...register("confirmPassword")}
                 disabled={isSubmitting}
               />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                style={togglePasswordBtnStyle}
+                aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+              >
+                {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
             </div>
             {errors.confirmPassword && (
               <span style={errorTextStyle}>{errors.confirmPassword.message}</span>
@@ -272,4 +290,17 @@ const footerStyle = {
 const linkStyle = {
   color: "var(--accent-red)",
   fontWeight: "700",
+};
+
+const togglePasswordBtnStyle = {
+  position: "absolute",
+  right: "14px",
+  background: "transparent",
+  border: "none",
+  cursor: "pointer",
+  color: "#888888",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "4px",
 };

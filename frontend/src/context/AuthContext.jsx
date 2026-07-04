@@ -51,12 +51,12 @@ export default function AuthProvider({ children }) {
       }
     }
     
-    // Extracted email and username from decoded JWT claims
+    // Extracted email, username, and signed role from decoded JWT claims
     return {
       id: decoded.sub ? parseInt(decoded.sub, 10) : null,
       username: decoded.username || "",
       email: decoded.email || parsedUser?.email || "",
-      role: parsedUser?.role || localStorage.getItem("role") || "user",
+      role: decoded.role || parsedUser?.role || "user",
     };
   });
 
@@ -74,19 +74,16 @@ export default function AuthProvider({ children }) {
     let userProfile = null;
     if (userData) {
       localStorage.setItem("user", JSON.stringify(userData));
-      localStorage.setItem("role", userData.role || "user");
       userProfile = userData;
     } else {
       const decoded = decodeToken(accessToken);
-      const assumedRole = decoded?.username?.toLowerCase().includes("admin") ? "admin" : "user";
-      localStorage.setItem("role", assumedRole);
       
-      // Decoded email claim is now extracted and saved in local userProfile state
+      // Decoded email and role claims are now extracted from JWT and saved in local userProfile state
       userProfile = {
         id: decoded?.sub ? parseInt(decoded.sub, 10) : null,
         username: decoded?.username || "",
         email: decoded?.email || "",
-        role: assumedRole
+        role: decoded?.role || "user"
       };
       localStorage.setItem("user", JSON.stringify(userProfile));
     }
@@ -98,22 +95,10 @@ export default function AuthProvider({ children }) {
 
   const logout = useCallback(() => {
     localStorage.removeItem("token");
-    localStorage.removeItem("role");
     localStorage.removeItem("user");
     setToken(null);
     setUser(null);
     setIsLoggedIn(false);
-  }, []);
-
-  const toggleRole = useCallback(() => {
-    setUser((prevUser) => {
-      if (!prevUser) return null;
-      const newRole = prevUser.role === "admin" ? "user" : "admin";
-      localStorage.setItem("role", newRole);
-      const updatedUser = { ...prevUser, role: newRole };
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-      return updatedUser;
-    });
   }, []);
 
   return (
@@ -124,8 +109,7 @@ export default function AuthProvider({ children }) {
         isLoggedIn,
         isLoading,
         login,
-        logout,
-        toggleRole
+        logout
       }}
     >
       {children}

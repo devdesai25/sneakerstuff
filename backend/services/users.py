@@ -59,6 +59,10 @@ async def signup_service(
         await db.commit()
         await db.refresh(new_user)
     
+    except Exception:
+        await db.rollback()
+        raise
+    
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
@@ -66,19 +70,15 @@ async def signup_service(
             detail="Database Integrity Error"
         )
     
-    except Exception:
-        await db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Internal Server Error"
-        )
 
-    # 4. Generate token payload containing user id, username, and email
+
+    # 4. Generate token payload containing user id, username, email, and actual database role
     access_token = encode(
          {
          "sub": str(new_user.id),
          "username": new_user.username,
-         "email": new_user.email
+         "email": new_user.email,
+         "role": new_user.role
         }
     )
 
@@ -122,11 +122,12 @@ async def login_service(
             detail="Invalid Password or Email"
         )
      
-    # Embed sub (id), username, and email in JWT claims
+    # Embed sub (id), username, email, and role in JWT claims
     access_token = encode({
         "sub": str(existing_user.id),
         "username": existing_user.username,
-        "email": existing_user.email
+        "email": existing_user.email,
+        "role": existing_user.role
         }
     )
 

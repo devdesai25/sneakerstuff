@@ -13,7 +13,7 @@ import { ShoppingCart, LogOut, User, Calendar, ClipboardList, ShieldAlert, Menu,
 import api from "../services/api";
 
 export default function Navbar() {
-  const { isLoggedIn, user, logout, toggleRole } = useContext(AuthContext);
+  const { isLoggedIn, user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
   const [cartCount, setCartCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -98,11 +98,7 @@ export default function Navbar() {
         <div className="nav-actions">
           {isLoggedIn ? (
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <div 
-                className="user-pill"
-                onClick={toggleRole} 
-                title="Click to toggle user/admin role (Local Sandbox Utility)"
-              >
+              <div className="user-pill" style={{ cursor: "default" }}>
                 <div className={`role-dot role-dot-${user?.role}`} />
                 <span>{user?.username} ({user?.role})</span>
               </div>
@@ -155,7 +151,7 @@ export default function Navbar() {
               )}
               <div style={{ borderTop: "1px solid var(--border-color)", padding: "16px 0", marginTop: "16px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                  <div className="user-pill" onClick={toggleRole} title="Toggle Role">
+                  <div className="user-pill" style={{ cursor: "default" }}>
                     <div className={`role-dot role-dot-${user?.role}`} />
                     <span>{user?.username} ({user?.role})</span>
                   </div>

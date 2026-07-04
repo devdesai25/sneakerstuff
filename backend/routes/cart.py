@@ -14,9 +14,9 @@ from backend.schemas.cart_items import (
 )
 from backend.services.auth import get_current_user
 from backend.services.cart_service import (
-    cartAdd, 
-    cartDelete, 
-    cartPatch
+    cart_add, 
+    cart_delete, 
+    cart_patch
 )
 
 
@@ -27,7 +27,7 @@ router = APIRouter(
 async def get_cart(
     db: AsyncSession = Depends(get_db), 
     user: User = Depends(get_current_user)
-):
+) -> dict:
     
     result = await db.execute(
         select(CartItem)
@@ -52,25 +52,25 @@ async def create_cart(
     cart: CartCreate,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
-    ):
+):
 
-    return await cartAdd(cart, user, db)
+    return await cart_add(cart, user, db)
 
-@router.delete("/cart/{id}")
+@router.delete("/cart/{product_id}")
 async def delete_cart(
-    id: int, 
+    product_id: int, 
     user: User = Depends(get_current_user), 
     db: AsyncSession = Depends(get_db)
 ):
     
-    return await cartDelete(id, user, db)
+    return await cart_delete(product_id, user, db)
 
-@router.patch("/cart/{id}")
+@router.patch("/cart/{product_id}")
 async def patch_cart(
-    id: int, 
+    product_id: int, 
     cart: CartPatch, 
     user: User = Depends(get_current_user), 
     db: AsyncSession = Depends(get_db)
 ):
     
-    return await cartPatch(id, cart, user, db)
+    return await cart_patch(product_id, cart, user, db)

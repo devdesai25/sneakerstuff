@@ -9,6 +9,7 @@ from backend.schemas.drops import DropCreate
 from backend.enums.drop_status import DropStatus
 from backend.tasks.drop_tasks import activate_drop, close_drop
 from backend.helpers.drop_helpers import get_drop_or_404, drop_get
+from backend.helpers.product_helpers import get_product_or_404
 
 async def drop_create(
     drop_data: DropCreate, 
@@ -20,11 +21,6 @@ async def drop_create(
             select(Product).where(Product.product_id == drop_data.product_id)
         )
     ).scalar_one_or_none()
-    """(
-        db.query(Product)
-        .filter(Product.product_id == drop_data.product_id)
-        .first()
-    )    """
 
     if not product:
         raise HTTPException(
@@ -50,6 +46,9 @@ async def drop_create(
             opens_at = drop_data.opens_at,
             closes_at = drop_data.closes_at,
             drop_inventory = drop_data.drop_inventory,
+            product_name = product.name,
+            product_price = product.price,
+            product_image = product.images,
             status = DropStatus.DRAFT
         )
 
@@ -73,7 +72,7 @@ async def drop_create(
 async def drop_update(
     drop_id: int, 
     drop_data: DropCreate, 
-    db:AsyncSession
+    db: AsyncSession
 )-> Drop:
 
     drop = await get_drop_or_404(drop_id, db)
@@ -127,6 +126,9 @@ async def drop_delete(
         )
     
     try:
+        product = await get_product_or_404(drop.product_id, db)
+        product.stock += drop.drop_inventory
+        drop.drop_inventory -= drop.drop_inventory
         await db.delete(drop)
         await db.commit()
     
@@ -157,7 +159,11 @@ async def drop_cancel(
         )
     
     try:
+        product = await get_product_or_404(drop.product_id, db)
+        product.stock += drop.drop_inventory
+        drop.drop_inventory -= drop.drop_inventory
         drop.status = DropStatus.CANCELLED
+        
         await db.commit()
         await db.refresh(drop)
 
@@ -181,14 +187,33 @@ async def drop_publish(
     
     drop = await get_drop_or_404(drop_id, db)
 
+    product = (
+        await db.execute(
+            select(Product)
+            .where(Product.product_id == drop.product_id)
+        )
+    ).scalar_one_or_none()
+
     if drop.status != DropStatus.DRAFT:
         raise HTTPException(
             status_code=400,
             detail="Invalid state transition"
+    
+        )
+    if drop.drop_inventory < 0 :
+        raise HTTPException(
+            status_code=422,
+            detail="Drop inventory cannot be zero or less than zero"
+        )
+    if product.stock <=  drop.drop_inventory:
+        raise HTTPException(
+            status_code=422,
+            detail="Insufficient Stock"
         )
     
     try:
-        drop.status = DropStatus.SCHEDULED        
+        drop.status = DropStatus.SCHEDULED 
+        product.stock -= drop.drop_inventory           
         await db.commit()
         await db.refresh(drop)
         

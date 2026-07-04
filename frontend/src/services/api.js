@@ -1,20 +1,32 @@
-import axios from "axios"
+/* ==========================================
+   SNEAKERSTUFF AUTH REFACTOR
+   Modified by Sneakerstuff Developer
+
+   Login now authenticates using email.
+   Signup collects username + email.
+========================================== */
+
+import axios from "axios";
 
 const api = axios.create({
-    baseURL: "http://127.0.0.1:8000",
-    headers : {
-        "Content-Type": "application/json"
-    }
-})
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
-api.interceptors.request.use((config) => {
-    const token = localStorage.getItem("token")
-    
+// Interceptor injection to automatically bind Bearer access tokens
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("token");
     if (token) {
-        config.headers.Authorization = `Bearer ${token}`
+      config.headers.Authorization = `Bearer ${token}`;
     }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
-    return config
-})
-
-export default api
+export default api;

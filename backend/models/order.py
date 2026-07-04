@@ -1,5 +1,5 @@
 from backend.database import Base
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, Numeric, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -14,7 +14,10 @@ class Order(Base):
         nullable=False
     )
 
-    total_amount = Column(Float, nullable=False)
+    total_amount = Column(
+        Numeric(10, 2),
+        nullable=False
+    )
 
     status = Column(String, nullable=False, index=True,)
 

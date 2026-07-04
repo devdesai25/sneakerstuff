@@ -1,5 +1,6 @@
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, timezone
@@ -11,20 +12,9 @@ from backend.models.order_items import OrderItem
 from backend.models.products import Product
 from backend.schemas.orders import OrderResponse, OrderRequest
 from backend.enums.order_status import OrderStatus
-from backend.helpers.order_helpers import get_order_one_or_404, get_orders_all_or_404
+from backend.helpers.order_helpers import get_order_one_or_404, get_orders_all_or_404, restore_stock
 
-async def restore_stock(order: Order, db: AsyncSession):
-
-    for item in order.order_items:
-        product = (
-            await db.execute(
-                select(Product).where(Product.product_id == item.product_id)
-            )
-        ).scalar_one_or_none() 
-        if product:
-            product.stock += item.quantity
-
-async def orderGet(
+async def order_get(
     user: User, 
     db: AsyncSession
 ) -> OrderResponse:
@@ -33,7 +23,7 @@ async def orderGet(
 
     return orders
 
-async def orderCreate(
+async def order_create(
     address: OrderRequest, 
     user: User, 
     db: AsyncSession
@@ -117,6 +107,18 @@ async def orderCreate(
         await db.commit()
         await db.refresh(new_order)
 
+        stmt = (
+        select(Order)
+            .where(Order.order_id == new_order.order_id)
+            .options(
+                selectinload(Order.order_items),
+                selectinload(Order.user),
+            )
+        )
+
+        result = await db.execute(stmt)
+
+
     except HTTPException:
         await db.rollback()
         raise
@@ -134,7 +136,7 @@ async def orderCreate(
 
     return new_order
 
-async def orderPay(
+async def order_pay(
     order_id: int, 
     user: User, 
     db: AsyncSession
@@ -169,7 +171,6 @@ async def orderPay(
         await db.commit()
         await db.refresh(order)
 
-
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
@@ -183,7 +184,7 @@ async def orderPay(
 
     return order
 
-async def orderCancel(
+async def order_cancel(
     order_id: int, 
     user: User, 
     db: AsyncSession

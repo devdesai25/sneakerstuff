@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.drops import Drop
+from backend.models.entry import Entry
 
 async def drop_get(db: AsyncSession) -> list[Drop]:
 
@@ -29,3 +30,20 @@ async def get_drop_or_404(drop_id: int, db: AsyncSession) -> Drop:
         )
 
     return drop
+
+async def get_entries_or_404(drop_id: int, db: AsyncSession) -> list[Entry]:
+
+    entries = (
+        await db.execute(
+            select(Entry)
+            .where(Entry.drop_id == drop_id)
+        )
+    ).scalars().all()
+
+    if not entries:
+        raise HTTPException(
+            status_code=404,
+            detail="Entries not found"
+        )
+    
+    return entries

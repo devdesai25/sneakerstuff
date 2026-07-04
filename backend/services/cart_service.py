@@ -5,16 +5,18 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.models.products import Product
 from backend.models.cart_items import CartItem
+from backend.models.users import User
+from backend.schemas.cart_items import CartPatch, CartCreate
 
-async def cartAdd(
-        cur_cart,
-        user, 
-        db: AsyncSession
-    ):
+async def cart_add(
+    cur_cart: CartCreate,
+    user: User, 
+    db: AsyncSession
+) -> CartItem:
     """Add to cart with validation"""
     product = (
         await db.execute(
-            select(Product).where(Product.product_id == cur_cart.product_)
+            select(Product).where(Product.product_id == cur_cart.product_id)
         )
     ).scalar_one_or_none()
 
@@ -77,24 +79,19 @@ async def cartAdd(
 
     return cart
 
-async def cartPatch(
-        id: int, 
-        cur_cart, 
-        user, 
-        db: AsyncSession
-    ):
+async def cart_patch(
+    product_id: int, 
+    cur_cart: CartPatch, 
+    user: User, 
+    db: AsyncSession
+) -> CartItem:
     """Set/Delete Product from cart"""
     product = (
         await db.execute(
-            select(Product).where(Product.product_id == id)
+            select(Product).where(Product.product_id == product_id)
         )
     ).scalar_one_or_none()
-    """ (
-        db.query(Product)
-        .filter(Product.product_id == id)
-        .first()
-    )
-    """
+
     if not product:
         raise HTTPException(
             status_code= 404,
@@ -103,15 +100,10 @@ async def cartPatch(
     
     cart = (
         await db.execute(
-            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == id)
+            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == product_id)
         )
     ).scalar_one_or_none() 
-    """(
-        db.query(CartItem)
-        .filter(CartItem.user_id == user.id, CartItem.product_id == id)
-        .first()
-    )"""
-
+    
     if cart is None:
         raise HTTPException(
             status_code= 404,
@@ -145,15 +137,15 @@ async def cartPatch(
             detail= "Database Integrity Error"
         )
 
-async def cartDelete(
-        id: int, 
-        user, 
-        db: AsyncSession
-    ):
+async def cart_delete(
+    product_id: int, 
+    user: User, 
+    db: AsyncSession
+) -> dict:
     """Delete Product from Cart"""
     cart = (
         await db.execute(
-            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == id)
+            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == product_id)
         )
     ).scalar_one_or_none()
 

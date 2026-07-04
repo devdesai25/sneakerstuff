@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 #load .env from backend folder
-env_path = Path(__file__).parent.parent / "backend" / ".env"
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # add paths for imports
@@ -25,7 +25,8 @@ from backend.models.reservations import Reservation
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
-from sqlalchemy import pool, create_engine
+from sqlalchemy import create_engine
+from sqlalchemy.pool import NullPool
 
 from alembic import context
 
@@ -95,7 +96,13 @@ def run_migrations_online() -> None:
 #        poolclass=pool.NullPool,
 #        url=database_url,
 #    )
-    connectable = create_engine(database_url, poolclass = pool.NullPool)    
+    connectable = create_engine(
+        database_url.replace(
+            "postgresql+asyncpg",
+            "postgresql+psycopg2"
+        ), 
+        poolclass = NullPool
+    )    
 
     with connectable.connect() as connection:
         context.configure(

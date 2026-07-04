@@ -1,5 +1,5 @@
 from backend.database import Base
-from sqlalchemy import Column, ForeignKey, PrimaryKeyConstraint, Integer, String, DateTime
+from sqlalchemy import Column, ForeignKey, PrimaryKeyConstraint, Integer, String, DateTime, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -37,6 +37,21 @@ class Drop(Base):
     drop_inventory = Column(
         Integer, 
         nullable=False
+    )
+
+    product_price = Column(
+        Numeric(10, 2),
+        nullable=False
+    )
+    
+    product_name = Column(
+        String,
+        nullable=True
+    )
+
+    product_image = Column(
+        String,
+        nullable=True
     )
 
     status = Column(

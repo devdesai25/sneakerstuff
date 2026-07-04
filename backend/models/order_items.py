@@ -1,5 +1,5 @@
 from backend.database import Base
-from sqlalchemy import Column, Integer, String, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, Numeric
 from sqlalchemy.orm import relationship
 
 class OrderItem(Base):
@@ -20,9 +20,15 @@ class OrderItem(Base):
     
     quantity = Column(Integer, default=1)
 
-    unit_price = Column(Float, nullable=False)
+    unit_price = Column(
+        Numeric(10, 2),
+        nullable=False
+    )
 
-    subtotal = Column(Float)
+    subtotal = Column(
+        Numeric(10, 2),
+        nullable=False
+    )
 
     order = relationship(
         "Order",

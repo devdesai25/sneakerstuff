@@ -31,6 +31,10 @@ class Entry(Base):
         nullable=True
     )
 
+    address = Column(
+        String,
+        nullable=False
+    )
     user = relationship(
         "User",
         back_populates="entries"
@@ -53,10 +57,11 @@ class Entry(Base):
         "user_id",
         name="unique_entry_and_user"
         ),
-    )
-
-    Index(
+        Index(
         "idx_drop_ranking",
         "drop_id",
         "ranking"
+        ),
     )
+
+    

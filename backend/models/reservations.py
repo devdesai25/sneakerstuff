@@ -26,21 +26,10 @@ class Reservation(Base):
         unique=True,
         nullable=False
     )
-    
-    status = Column(
-        String, 
-        index=True, 
-        nullable=False
-    )
 
     created_at = Column(
         DateTime(timezone=True), 
         server_default=func.now(), 
-        nullable=False
-    )
-    
-    expiry_at = Column(
-        DateTime(timezone=True),
         nullable=False
     )
     

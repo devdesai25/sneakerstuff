@@ -62,7 +62,8 @@ async def product_delete(
     
     drop = (
         await db.execute(
-            select(Drop.product_id == product.product_id)
+            select(Drop)
+            .where(Drop.product_id == product.product_id)
         )
     ).scalars().all()
 
@@ -71,6 +72,7 @@ async def product_delete(
             status_code=409,
             detail="Cannot delete a product that is used in a drop"
         )
+    
     try:
         await db.delete(product)
         await db.commit()

@@ -10,4 +10,3 @@ class DropStatus(str, Enum):
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
     PAUSED = "PAUSED"
-        

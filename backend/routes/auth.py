@@ -6,7 +6,6 @@ from backend.database import get_db
 from backend.services.users import login_service, signup_service
 from backend.schemas.users import UserLogin, UserResponse, UserSignup
 
-
 router = APIRouter(
     tags=["Auth"]
 )
@@ -18,7 +17,6 @@ async def login(
 ):
 
     return await login_service(form_data, db)
-
 
 @router.post("/signup")
 async def signup(

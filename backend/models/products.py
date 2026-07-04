@@ -1,5 +1,5 @@
 from backend.database import Base
-from sqlalchemy import Column, String, Float, Integer, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, String, Numeric, Integer, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .users import User
@@ -12,7 +12,10 @@ class Product(Base):
     description = Column(String, nullable=False)
 
     stock = Column(Integer, default=0, nullable=False)
-    price = Column(Float, nullable=False)
+    price = Column(
+        Numeric(10, 2),
+        nullable=False
+    )
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

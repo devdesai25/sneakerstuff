@@ -1,21 +1,26 @@
 from fastapi import HTTPException
-from models.products import Product
-from models.cart_items import CartItem
-from sqlalchemy import and_
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
-def cartAdd(
-        cur_cart,
-        user, 
-        db
-    ):
+from backend.models.products import Product
+from backend.models.cart_items import CartItem
+from backend.models.users import User
+from backend.schemas.cart_items import CartPatch, CartCreate
+
+async def cart_add(
+    cur_cart: CartCreate,
+    user: User, 
+    db: AsyncSession
+) -> CartItem:
     """Add to cart with validation"""
     product = (
-        db.get(Product, 
-        cur_cart.product_id)
+        await db.execute(
+            select(Product).where(Product.product_id == cur_cart.product_id)
         )
+    ).scalar_one_or_none()
 
-    if product is None:
+    if not product:
         raise HTTPException(
             status_code= 404,
             detail= "Product Not found"
@@ -28,11 +33,10 @@ def cartAdd(
         )
     
     cart = (
-        db.query(CartItem)
-        .filter(CartItem.user_id == user.id, CartItem.product_id == cur_cart.product_id)
-        .first()
-    )
-
+        await db.execute(
+            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == cur_cart.product_id)
+        )
+    ).scalar_one_or_none()
     
     if cart is None:
         try:
@@ -43,14 +47,13 @@ def cartAdd(
             )
 
             db.add(add_to_cart)
-            db.commit()
-            db.refresh(add_to_cart)
+            await db.commit()
+            await db.refresh(add_to_cart)
 
             return add_to_cart
 
         except IntegrityError:
-            db.rollback()
-            
+            await db.rollback()
             raise HTTPException(
                 status_code=409,
                 detail="Database Integrity Error"
@@ -64,12 +67,11 @@ def cartAdd(
    
     try:
         cart.quantity += cur_cart.quantity
-        db.commit()
-        db.refresh(cart)
+        await db.commit()
+        await db.refresh(cart)
     
     except IntegrityError:
-        db.rollback()
-
+        await db.rollback()
         raise HTTPException(
             status_code=409,
             detail="Database integrity error"
@@ -77,31 +79,31 @@ def cartAdd(
 
     return cart
 
-def cartPatch(
-        id, 
-        cur_cart, 
-        user, 
-        db
-    ):
+async def cart_patch(
+    product_id: int, 
+    cur_cart: CartPatch, 
+    user: User, 
+    db: AsyncSession
+) -> CartItem:
     """Set/Delete Product from cart"""
     product = (
-        db.query(Product)
-        .filter(Product.product_id == id)
-        .first()
-    )
+        await db.execute(
+            select(Product).where(Product.product_id == product_id)
+        )
+    ).scalar_one_or_none()
 
-    if product is None:
+    if not product:
         raise HTTPException(
             status_code= 404,
             detail= "Product Not Found"
         )
     
     cart = (
-        db.query(CartItem)
-        .filter(CartItem.user_id == user.id, CartItem.product_id == id)
-        .first()
-    )
-
+        await db.execute(
+            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == product_id)
+        )
+    ).scalar_one_or_none() 
+    
     if cart is None:
         raise HTTPException(
             status_code= 404,
@@ -116,36 +118,36 @@ def cartPatch(
     
     try:
         if cur_cart.quantity == 0:
-            db.delete(cart)
-            db.commit()
+            await db.delete(cart)
+            await db.commit()
             return {"Message": "Product Removed From Cart"}
         
         else:
             cart.quantity = cur_cart.quantity
-            db.commit()
-            db.refresh(cart)
+            await db.commit()
+            await db.refresh(cart)
 
             return cart
     
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
 
         raise HTTPException(
             status_code= 409,
             detail= "Database Integrity Error"
         )
 
-def cartDelete(
-        id, 
-        user, 
-        db
-    ):
+async def cart_delete(
+    product_id: int, 
+    user: User, 
+    db: AsyncSession
+) -> dict:
     """Delete Product from Cart"""
     cart = (
-        db.query(CartItem)
-        .filter(CartItem.user_id == user.id, CartItem.product_id == id)
-        .first()
-    )
+        await db.execute(
+            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == product_id)
+        )
+    ).scalar_one_or_none()
 
     if cart is None:
         raise HTTPException(
@@ -154,11 +156,11 @@ def cartDelete(
         )
     
     try:
-        db.delete(cart)
-        db.commit()
+        await db.delete(cart)
+        await db.commit()
     
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
 
         raise HTTPException(
             status_code= 409,

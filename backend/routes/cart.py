@@ -1,22 +1,41 @@
 from fastapi import APIRouter, Depends
-from database import get_db
-from schemas.cart_items import CartResponse, CartCreate, CartPatch
-from sqlalchemy.orm import Session
-from models.cart_items import CartItem
-from services.auth import get_current_user
-from services.cart_service import cartAdd, cartDelete, cartPatch
-from models.users import User
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.schemas.cart_items import CartResponse, CartCreate, CartPatch
+from backend.database import get_db
+from backend.models.cart_items import CartItem
+from backend.models.users import User
+from backend.schemas.cart_items import (
+    CartResponse, 
+    CartCreate, 
+    CartPatch
+)
+from backend.services.auth import get_current_user
+from backend.services.cart_service import (
+    cart_add, 
+    cart_delete, 
+    cart_patch
+)
+
 
 router = APIRouter(
     tags=["userCart"])
 
 @router.get("/cart", response_model= list[CartResponse])
-def get_cart(
-    db: Session = Depends(get_db), 
+async def get_cart(
+    db: AsyncSession = Depends(get_db), 
     user: User = Depends(get_current_user)
-):
+) -> dict:
     
-    cart = db.query(CartItem).filter(CartItem.user_id == user.id).all()
+    result = await db.execute(
+        select(CartItem)
+        .where(CartItem.user_id == user.id)
+        .options(selectinload(CartItem.product))
+    )
+    
+    cart = result.scalars().all()
     
     return [{
         "product_id": item.product.product_id,
@@ -29,25 +48,29 @@ def get_cart(
     ]
 
 @router.post("/cart")
-def create_cart(
+async def create_cart(
     cart: CartCreate,
     user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-    ):
+    db: AsyncSession = Depends(get_db)
+):
 
-    return cartAdd(cart, user, db)
+    return await cart_add(cart, user, db)
 
-@router.delete("/cart/{id}")
-def delete_cart(id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    
-    return  cartDelete(id, user, db)
-
-@router.patch("/cart/{id}")
-def patch_cart(
-    id: int, 
-    cart: CartPatch, 
+@router.delete("/cart/{product_id}")
+async def delete_cart(
+    product_id: int, 
     user: User = Depends(get_current_user), 
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     
-    return cartPatch(id, cart, user, db)
+    return await cart_delete(product_id, user, db)
+
+@router.patch("/cart/{product_id}")
+async def patch_cart(
+    product_id: int, 
+    cart: CartPatch, 
+    user: User = Depends(get_current_user), 
+    db: AsyncSession = Depends(get_db)
+):
+    
+    return await cart_patch(product_id, cart, user, db)

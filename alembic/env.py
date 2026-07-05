@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 
 #load .env from backend folder
-env_path = Path(__file__).parent.parent / "backend" / ".env"
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 # add paths for imports
@@ -13,12 +13,20 @@ sys.path.append(str(Path(__file__).parent.parent / "backend"))
 
 # import your base
 from backend.database import Base
-
-
+#print("ENV BASE:", id(Base))
+from backend.models.users import User
+from backend.models.products import Product
+from backend.models.cart_items import CartItem
+from backend.models.order import Order
+from backend.models.order_items import OrderItem
+from backend.models.drops import Drop
+from backend.models.entry import Entry
+from backend.models.reservations import Reservation
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
-from sqlalchemy import pool, create_engine
+from sqlalchemy import create_engine
+from sqlalchemy.pool import NullPool
 
 from alembic import context
 
@@ -36,6 +44,7 @@ if config.config_file_name is not None:
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
 # In alembic/env.py, add this to debug:  # See what tables Alembic knows
+#print(Base.metadata.tables.keys())
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
@@ -87,7 +96,13 @@ def run_migrations_online() -> None:
 #        poolclass=pool.NullPool,
 #        url=database_url,
 #    )
-    connectable = create_engine(database_url, poolclass = pool.NullPool)    
+    connectable = create_engine(
+        database_url.replace(
+            "postgresql+asyncpg",
+            "postgresql+psycopg2"
+        ), 
+        poolclass = NullPool
+    )    
 
     with connectable.connect() as connection:
         context.configure(

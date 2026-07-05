@@ -7,3 +7,7 @@ passlib
 python-multipart
 pydantic-settings
 python-dotenv
+celery 
+redis
+asyncpg
+httpx

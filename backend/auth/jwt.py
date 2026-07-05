@@ -4,7 +4,7 @@ import json
 from datetime import timedelta, datetime
 from fastapi import HTTPException
 from fastapi.security import OAuth2PasswordBearer
-from config import settings
+from backend.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt_sha256","bcrypt"], deprecated="auto")
 

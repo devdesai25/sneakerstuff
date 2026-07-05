@@ -1,7 +1,7 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, UniqueConstraint
+from backend.database import Base
+from sqlalchemy import Column, Integer, String, ForeignKey, Numeric, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from database import Base
 
 class Order(Base):
     __tablename__ = "orders"
@@ -14,7 +14,10 @@ class Order(Base):
         nullable=False
     )
 
-    total_amount = Column(Float, nullable=False)
+    total_amount = Column(
+        Numeric(10, 2),
+        nullable=False
+    )
 
     status = Column(String, nullable=False, index=True,)
 
@@ -39,3 +42,14 @@ class Order(Base):
         back_populates="order", 
         cascade="all, delete-orphan"
         )
+    
+    reservation = relationship(
+        "Reservation",
+        back_populates="order",
+        uselist=False
+    )
+
+    user = relationship(
+        "User",
+        back_populates="orders"
+    )

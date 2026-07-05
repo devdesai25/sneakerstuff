@@ -1,3 +1,10 @@
+# ==========================================
+# SNEAKERSTUFF AUTH REFACTOR
+# Modified by Sneakerstuff Developer
+# Purpose:
+# Drop service operations.
+# ==========================================
+
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -5,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.models.drops import Drop
 from backend.models.products import Product
-from backend.schemas.drops import DropCreate
+from backend.schemas.drops import DropCreate, DropUpdate
 from backend.enums.drop_status import DropStatus
 from backend.tasks.drop_tasks import activate_drop, close_drop
 from backend.helpers.drop_helpers import get_drop_or_404, drop_get
@@ -71,7 +78,7 @@ async def drop_create(
 
 async def drop_update(
     drop_id: int, 
-    drop_data: DropCreate, 
+    drop_data: DropUpdate, 
     db: AsyncSession
 )-> Drop:
 
@@ -83,12 +90,20 @@ async def drop_update(
             detail = "Invalid state transition"
         )
     
+    product = await get_product_or_404(drop.product_id, db)
+    
     try:
         update_data = drop_data.model_dump(exclude_unset=True)
 
         for key,value in update_data.items():
             if hasattr(drop, key):
                 setattr(drop, key, value)
+
+        if product.stock < drop.drop_inventory:
+            raise HTTPException(
+                status_code=422,
+                detail="Insufficient Stock"
+            )
 
         if drop.opens_at >= drop.closes_at:
             raise HTTPException(

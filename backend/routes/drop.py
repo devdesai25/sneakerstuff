@@ -1,9 +1,18 @@
+# ==========================================
+# SNEAKERSTUFF AUTH REFACTOR
+# Modified by Sneakerstuff Developer
+# Purpose:
+# Public and admin drop routes.
+# ==========================================
+
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.services.auth import req_admin
 from backend.database import get_db
 from backend.models.users import User
+from backend.models.drops import Drop
 from backend.schemas.drops import DropResponse, DropCreate, DropUpdate
 from backend.services.drop_service import (
     drop_get, drop_create, 
@@ -12,6 +21,15 @@ from backend.services.drop_service import (
 )
 
 router = APIRouter()
+
+@router.get("/drops", response_model = list[DropResponse])
+async def get_public_drops(
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve all published drops (excluding DRAFT status) for public users."""
+    stmt = select(Drop).where(Drop.status != "DRAFT")
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 @router.get("/admin/drop", response_model = list[DropResponse])
 async def get_drop(

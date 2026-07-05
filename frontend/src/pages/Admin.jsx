@@ -107,10 +107,24 @@ export default function Admin() {
     onSuccess: () => {
       toast.success("Drop scheduled successfully!");
       queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
-      setDropForm({ product_id: "", opens_at: "", closes_at: "", drop_inventory: "" });
+      setDropForm({ id: "", product_id: "", opens_at: "", closes_at: "", drop_inventory: "" });
     },
     onError: (err) => {
       toast.error(err.response?.data?.detail || "Failed to schedule drop.");
+    },
+  });
+
+  const updateDropMutation = useMutation({
+    mutationFn: async ({ id, payload }) => {
+      return await api.patch(`/admin/drop/${id}`, payload);
+    },
+    onSuccess: () => {
+      toast.success("Drop updated successfully!");
+      queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
+      setDropForm({ id: "", product_id: "", opens_at: "", closes_at: "", drop_inventory: "" });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to update drop.");
     },
   });
 
@@ -183,7 +197,21 @@ export default function Admin() {
       closes_at: new Date(dropForm.closes_at).toISOString(),
       drop_inventory: parseInt(dropForm.drop_inventory, 10),
     };
-    createDropMutation.mutate(payload);
+    if (dropForm.id) {
+      updateDropMutation.mutate({ id: dropForm.id, payload });
+    } else {
+      createDropMutation.mutate(payload);
+    }
+  };
+
+  const fillDropForm = (drop) => {
+    setDropForm({
+      id: drop.drop_id,
+      product_id: drop.product_id,
+      opens_at: drop.opens_at ? drop.opens_at.slice(0, 16) : "",
+      closes_at: drop.closes_at ? drop.closes_at.slice(0, 16) : "",
+      drop_inventory: drop.drop_inventory,
+    });
   };
 
   const fillProductForm = (prod) => {
@@ -351,7 +379,9 @@ export default function Admin() {
         <div style={panelGridStyle}>
           {/* Create Drop Form */}
           <div className="premium-panel" style={formCardStyle}>
-            <h3 style={formTitleStyle}>SCHEDULE DROP DRAW</h3>
+            <h3 style={formTitleStyle}>
+              {dropForm.id ? "UPDATE DROP DRAW" : "SCHEDULE DROP DRAW"}
+            </h3>
 
             <form onSubmit={handleDropSubmit}>
               <div className="form-group">
@@ -440,6 +470,14 @@ export default function Admin() {
                           title="Publish & Schedule Tasks"
                         >
                           <Send size={11} /> Publish
+                        </button>
+                        <button
+                          onClick={() => fillDropForm(drop)}
+                          className="btn btn-outline"
+                          style={actionBtnTinyStyle}
+                          title="Edit Drop"
+                        >
+                          <Edit3 size={11} /> Edit
                         </button>
                         <button
                           onClick={() => deleteDropMutation.mutate(drop.drop_id)}

@@ -146,77 +146,100 @@ def select_winners(self, drop_id: int):
 
 async def _expire_unpaid_reservations(self, reservation_id):
     async with CelerySessionLocal() as db: 
-
         try:
+            # Query the reservation, preloading the order and the entry's drop details
             reservation = (
                 await db.execute(
                     select(Reservation)
                     .where(Reservation.reservation_id == reservation_id)
-                    .options(selectinload(Reservation.entry))
+                    .options(
+                        selectinload(Reservation.order),
+                        selectinload(Reservation.entry).selectinload(Entry.drop)
+                    )
                 )
             ).scalar_one_or_none()
 
-            if reservation.order.status == OrderStatus.PAID:
+            # If the reservation doesn't exist, exit gracefully
+            if not reservation:
+                return
+
+            # If the order is already PAID, do not expire it
+            if reservation.order and reservation.order.status == OrderStatus.PAID:
                 return
             
-            reservations = (
-                await db.execute(
-                    select(Reservation.entry_id)
-                )
-            )
-            drop = await get_drop_or_404(reservation_id.entry_id.drop_id, db)
+            # Set the unpaid order status to EXPIRED
+            if reservation.order:
+                reservation.order.status = OrderStatus.EXPIRED
+
+            drop = reservation.entry.drop
+            # Increment the drop inventory because the reservation slot is freed up
             drop.drop_inventory += 1
             await db.flush()
 
+            # Retrieve all entry IDs that are currently associated with any reservation
+            res_stmt = select(Reservation.entry_id)
+            res_result = await db.execute(res_stmt)
+            reserved_entry_ids = [r[0] for r in res_result.all()]
+
+            # Query the next highest ranked entry that doesn't have a reservation
             stmt = (
                 select(Entry)
-                .where(Entry.drop_id == drop.drop_id,
-                       Entry.entry_id not in reservations)
+                .where(
+                    Entry.drop_id == drop.drop_id,
+                    ~Entry.entry_id.in_(reserved_entry_ids)
+                )
                 .order_by(Entry.ranking.asc())
-                .limit(drop.drop_inventory)
+                .limit(1)
             )
 
             result = await db.execute(stmt)
             new_winner = result.scalar_one_or_none()
-            expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
 
-            new_order = Order(
-                user_id = new_winner.user_id,
-                total_amount = drop.product_price,
-                status = OrderStatus.PENDING,
-                expires_at = expires_at,
-                address = new_winner.address
-            )
-            db.add(new_order)
-            await db.flush()
+            if new_winner:
+                # We have a new winner! Decrement drop inventory back by 1
+                drop.drop_inventory -= 1
+                
+                expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
 
-            new_order_item = OrderItem(
-                order_id = new_order.order_id,
-                product_id = drop.product_id,
-                quantity = 1,
-                unit_price = drop.product_price,
-                subtotal = drop.product_price
-            )
-            db.add(new_order_item)
+                new_order = Order(
+                    user_id = new_winner.user_id,
+                    total_amount = drop.product_price,
+                    status = OrderStatus.PENDING,
+                    expires_at = expires_at,
+                    address = new_winner.address
+                )
+                db.add(new_order)
+                await db.flush()
 
-            new_reservation = Reservation(
-                entry_id = new_winner.entry_id,
-                order_id = new_order.order_id
-            )
-            db.add(reservation)
-            await db.flush()
+                new_order_item = OrderItem(
+                    order_id = new_order.order_id,
+                    product_id = drop.product_id,
+                    quantity = 1,
+                    unit_price = drop.product_price,
+                    subtotal = drop.product_price
+                )
+                db.add(new_order_item)
 
-            expire_unpaid_reservations.apply_async(
-                args=[new_reservation.reservation_id],
-                eta=new_order.expires_at 
-            )
+                new_reservation = Reservation(
+                    entry_id = new_winner.entry_id,
+                    order_id = new_order.order_id
+                )
+                db.add(new_reservation)
+                await db.flush()
+
+                # Schedule the check for the new reservation's payment status
+                expire_unpaid_reservations.apply_async(
+                    args=[new_reservation.reservation_id],
+                    eta=new_order.expires_at 
+                )
         
             await db.commit()
-            await db.refresh(reservation)
+            if reservation:
+                await db.refresh(reservation)
         
         except Exception as exc:
             await db.rollback()
-            self.retry(exc=exc, countdown=10)
+            raise self.retry(exc=exc, countdown=10)
         finally:
             await db.close()
 

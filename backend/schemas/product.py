@@ -1,3 +1,10 @@
+# ==========================================
+# SNEAKERSTUFF AUTH REFACTOR
+# Modified by Sneakerstuff Developer
+# Purpose:
+# Product schema response formatting.
+# ==========================================
+
 from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
@@ -6,6 +13,7 @@ class ProductResponse(BaseModel):
     name : str
     description: str
     price : float
+    stock: int
     images: str | None = None
     
     model_config = ConfigDict(from_attributes=True)

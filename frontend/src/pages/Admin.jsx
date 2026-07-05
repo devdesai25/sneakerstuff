@@ -164,7 +164,7 @@ export default function Admin() {
       price: parseFloat(productForm.price),
       description: productForm.description,
       stock: parseInt(productForm.stock, 10),
-      images: productForm.images || null,
+      images: productForm.images || "",
     };
 
     if (productForm.id) {

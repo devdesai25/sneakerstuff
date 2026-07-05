@@ -56,7 +56,8 @@ async def drop_create(
             product_name = product.name,
             product_price = product.price,
             product_image = product.images,
-            status = DropStatus.DRAFT
+            status = DropStatus.DRAFT,
+            is_visible = drop_data.is_visible
         )
 
         db.add(new_drop)

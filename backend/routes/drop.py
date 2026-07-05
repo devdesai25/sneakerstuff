@@ -26,8 +26,8 @@ router = APIRouter()
 async def get_public_drops(
     db: AsyncSession = Depends(get_db)
 ):
-    """Retrieve all published drops (excluding DRAFT status) for public users."""
-    stmt = select(Drop).where(Drop.status != "DRAFT")
+    """Retrieve all published drops (excluding DRAFT and hidden statuses) for public users."""
+    stmt = select(Drop).where(Drop.status != "DRAFT", Drop.is_visible == True)
     result = await db.execute(stmt)
     return result.scalars().all()
 
@@ -82,3 +82,17 @@ async def publish_drop(
     db: AsyncSession = Depends(get_db)
 ):
     return await drop_publish(id, db)
+
+@router.post("/admin/drop/{id}/toggle-visibility", response_model=DropResponse)
+async def toggle_drop_visibility(
+    id: int,
+    admin: User = Depends(req_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Toggle drop visibility status for public users."""
+    from backend.helpers.drop_helpers import get_drop_or_404
+    drop = await get_drop_or_404(id, db)
+    drop.is_visible = not drop.is_visible
+    await db.commit()
+    await db.refresh(drop)
+    return drop

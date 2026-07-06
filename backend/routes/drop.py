@@ -1,10 +1,3 @@
-# ==========================================
-# SNEAKERSTUFF AUTH REFACTOR
-# Modified by Sneakerstuff Developer
-# Purpose:
-# Public and admin drop routes.
-# ==========================================
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

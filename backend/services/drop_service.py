@@ -1,10 +1,3 @@
-# ==========================================
-# SNEAKERSTUFF AUTH REFACTOR
-# Modified by Sneakerstuff Developer
-# Purpose:
-# Drop service operations.
-# ==========================================
-
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -213,15 +206,16 @@ async def drop_publish(
     if drop.status != DropStatus.DRAFT:
         raise HTTPException(
             status_code=400,
-            detail="Invalid state transition"
-    
+            detail="Invalid state transition"   
         )
+
     if drop.drop_inventory < 0 :
         raise HTTPException(
             status_code=422,
             detail="Drop inventory cannot be zero or less than zero"
         )
-    if product.stock <=  drop.drop_inventory:
+
+    if product.stock < drop.drop_inventory:
         raise HTTPException(
             status_code=422,
             detail="Insufficient Stock"

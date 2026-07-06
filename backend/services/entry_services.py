@@ -31,6 +31,11 @@ async def create_entry(
             )
         ).scalar_one_or_none()
         
+        if entry:
+            raise HTTPException(
+                status_code=400,
+                detail="You have already entered the drop"
+            )
         entry = Entry(
             drop_id = drop_id,
             user_id = user.id,
@@ -132,8 +137,8 @@ async def count_entry(
 
     try:
         stmt = (
-            select(func.count())
-            .select(Entry)
+            select(func.count(Entry.entry_id))
+            .select_from(Entry)
             .where(Entry.drop_id == drop_id)
         )
 

@@ -13,6 +13,7 @@ from backend.models.products import Product
 from backend.schemas.orders import OrderResponse, OrderRequest
 from backend.enums.order_status import OrderStatus
 from backend.helpers.order_helpers import get_order_one_or_404, get_orders_all_or_404, restore_stock
+from backend.tasks.drop_tasks import expire_unpaid_reservations
 
 async def order_get(
     user: User, 
@@ -144,14 +145,6 @@ async def order_pay(
 
     order = await get_order_one_or_404(order_id, user, db)
     
-    if (
-        order.status == OrderStatus.PENDING 
-        and datetime.now(timezone.utc) > order.expires_at
-    ):  
-        await restore_stock(order, db)
-        order.status = OrderStatus.EXPIRED
-        await db.commit()
-
     if order.status == OrderStatus.EXPIRED:
         raise HTTPException(
             status_code=400,
@@ -162,6 +155,19 @@ async def order_pay(
         raise HTTPException(
             status_code=422,
             detail="Unprocessable entity"
+        )
+    
+    if (
+        order.status == OrderStatus.PENDING 
+        and datetime.now(timezone.utc) > order.expires_at
+    ):  
+        await restore_stock(order, db)
+        order.status = OrderStatus.EXPIRED
+        await db.commit()
+
+        raise HTTPException(
+            status_code=400,
+            detail="Order has expired"
         )
 
     try:
@@ -190,35 +196,63 @@ async def order_cancel(
     db: AsyncSession
 ) -> OrderResponse:
 
-    order = await get_order_one_or_404(order_id, user, db)
+    order = (
+        await db.execute(
+            select(Order)
+            .where(Order.order_id == order_id, Order.user_id == user.id)
+            .options(selectinload(Order.reservation))
+        )
+    ).scalar_one_or_none() 
 
-    if (datetime.now(timezone.utc) > order.expires_at
-        and order.status == OrderStatus.PENDING
-    ):
-        await restore_stock(order, db)
-
-        order.status = OrderStatus.EXPIRED
-        await db.commit()
+    if not order:
+        raise HTTPException(
+            status_code=404,
+            detail="Order not found"
+        )
 
     if order.status == OrderStatus.EXPIRED:
         raise HTTPException(
             status_code=400,
             detail="Order has Expired"
         )
-
+    
     if order.status != OrderStatus.PENDING:
         raise HTTPException(
             status_code=422,
             detail="Unprocessable entity"
         )
     
+    is_raffle_order = order.reservation is not None
+
+    if (datetime.now(timezone.utc) > order.expires_at
+        and order.status == OrderStatus.PENDING
+    ):
+        if is_raffle_order is None:
+            await restore_stock(order, db)
+
+        order.status = OrderStatus.EXPIRED
+        await db.commit()
+
+        if is_raffle_order:
+            expire_unpaid_reservations.delay(order.reservation.reseration_id)
+        
+        raise HTTPException(
+            status_code=400,
+            detail="Order has expired"
+        )
+
     try:
-        await restore_stock(order, db)
+        if not is_raffle_order:
+            await restore_stock(order, db)
+        
         order.status = OrderStatus.CANCELLED
 
         await db.commit()
         await db.refresh(order)
-    
+        
+        if is_raffle_order:
+            expire_unpaid_reservations.delay(order.reservation.reservation_id)
+
     except IntegrityError:
         await db.rollback()
         raise HTTPException(

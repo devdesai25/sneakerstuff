@@ -12,3 +12,6 @@ redis
 asyncpg
 httpx
 bcrypt
+pytest
+pytest-asyncio
+asgi-lifespan

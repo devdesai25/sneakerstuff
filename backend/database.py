@@ -4,7 +4,15 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from backend.config import settings
 
 metadata = MetaData()
-engine  = create_async_engine(settings.DATABASE_URL, pool_size=20, max_overflow=0)
+engine = create_async_engine(
+    settings.DATABASE_URL,
+    pool_size=20,
+    max_overflow=0,
+    connect_args={
+        "prepared_statement_cache_size": 0,
+        "statement_cache_size": 0,
+    }
+)
 
 class Base(DeclarativeBase):
     pass

@@ -21,7 +21,11 @@ celery_app.conf.update(
 
 celery_engine = create_async_engine(
     url=settings.DATABASE_URL, 
-    poolclass=NullPool
+    poolclass=NullPool,
+    connect_args={
+        "prepared_statement_cache_size": 0,
+        "statement_cache_size": 0,
+    }
 )
 
 CelerySessionLocal = async_sessionmaker(

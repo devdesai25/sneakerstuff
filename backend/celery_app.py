@@ -1,3 +1,4 @@
+import uuid
 from celery import Celery
 from backend.config import settings
 from sqlalchemy.pool import NullPool
@@ -27,6 +28,7 @@ celery_engine = create_async_engine(
     connect_args={
         "prepared_statement_cache_size": 0,
         "statement_cache_size": 0,
+        "prepared_statement_name_func": lambda: f"__asyncpg_{uuid.uuid4().hex}__",
     }
 )
 

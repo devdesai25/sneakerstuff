@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.models.drops import Drop
 from backend.models.products import Product
 from backend.schemas.drops import DropCreate, DropUpdate
-from backend.enums.drop_status import DropStatus
+from backend.enums.drop_status import DropStatus, DELETABLE_STATES, STOCK_RESERVED_STATES, CANCELLABLE_STATES, PUBLISHABLE_STATES, UPDATABLE_STATES
 from backend.tasks.drop_tasks import activate_drop, close_drop
 from backend.helpers.drop_helpers import get_drop_or_404, drop_get
 from backend.helpers.product_helpers import get_product_or_404
@@ -25,19 +25,19 @@ async def drop_create(
     if not product:
         raise HTTPException(
             status_code=404,
-            detail="Product Not Found"
+            detail="Product not found"
         )
     
     if product.stock < drop_data.drop_inventory:
         raise HTTPException(
             status_code=422,
-            detail="Infsufficient Stock"
+            detail="Insufficient stock"
         )
     
     if drop_data.opens_at >= drop_data.closes_at:
         raise HTTPException(
             status_code=422,
-            detail="Unprocessable Entity"
+            detail="Unprocessable entity"
         )
     
     try:
@@ -78,7 +78,7 @@ async def drop_update(
 
     drop = await get_drop_or_404(drop_id, db)
     
-    if drop.status != DropStatus.DRAFT:
+    if drop.status not in UPDATABLE_STATES:
         raise HTTPException(
             status_code = 400,
             detail = "Invalid state transition"
@@ -89,20 +89,19 @@ async def drop_update(
     try:
         update_data = drop_data.model_dump(exclude_unset=True)
 
-        for key,value in update_data.items():
-            if hasattr(drop, key):
+        for key, value in update_data.items():
                 setattr(drop, key, value)
 
         if product.stock < drop.drop_inventory:
             raise HTTPException(
                 status_code=422,
-                detail="Insufficient Stock"
+                detail="Insufficient stock"
             )
 
         if drop.opens_at >= drop.closes_at:
             raise HTTPException(
                 status_code=422,
-                detail="Unprocessable Entity"
+                detail="Unprocessable entity"
             )
              
         await db.commit()
@@ -112,7 +111,7 @@ async def drop_update(
         await db.rollback()
         raise HTTPException(
             status_code=409,
-            detail="Database Integrity Error"
+            detail="Database integrity error"
         )
     
     except Exception:
@@ -128,16 +127,13 @@ async def drop_delete(
     
     drop = await get_drop_or_404(drop_id, db)
     
-    if drop.status != DropStatus.DRAFT:
+    if drop.status not in DELETABLE_STATES:
         raise HTTPException(
             status_code=400,
             detail="Invalid state transition"
         )
     
     try:
-        product = await get_product_or_404(drop.product_id, db)
-        product.stock += drop.drop_inventory
-        drop.drop_inventory -= drop.drop_inventory
         await db.delete(drop)
         await db.commit()
     
@@ -145,7 +141,7 @@ async def drop_delete(
         await db.rollback()
         raise HTTPException(
             status_code=409,
-            detail="Database Integrity Error"
+            detail="Database integrity error"
         )
     
     except Exception:
@@ -161,16 +157,18 @@ async def drop_cancel(
     
     drop = await get_drop_or_404(drop_id, db)
 
-    if drop.status != DropStatus.DRAFT:
+    if drop.status not in CANCELLABLE_STATES:
         raise HTTPException(
             status_code=400,
             detail="Invalid state transition"
         )
     
     try:
-        product = await get_product_or_404(drop.product_id, db)
-        product.stock += drop.drop_inventory
-        drop.drop_inventory -= drop.drop_inventory
+        # restore stock only if it was actually reserved
+        if drop.status in STOCK_RESERVED_STATES:
+            product = await get_product_or_404(drop.product_id, db)
+            product.stock += drop.drop_inventory
+        
         drop.status = DropStatus.CANCELLED
         
         await db.commit()
@@ -180,7 +178,7 @@ async def drop_cancel(
         await db.rollback()
         raise HTTPException(
             status_code=409,
-            detail="Database Integrity Error"
+            detail="Database integrity error"
         )
     
     except Exception:
@@ -203,13 +201,13 @@ async def drop_publish(
         )
     ).scalar_one_or_none()
 
-    if drop.status != DropStatus.DRAFT:
+    if drop.status not in PUBLISHABLE_STATES:
         raise HTTPException(
             status_code=400,
             detail="Invalid state transition"   
         )
 
-    if drop.drop_inventory < 0 :
+    if drop.drop_inventory <= 0 :
         raise HTTPException(
             status_code=422,
             detail="Drop inventory cannot be zero or less than zero"
@@ -218,7 +216,7 @@ async def drop_publish(
     if product.stock < drop.drop_inventory:
         raise HTTPException(
             status_code=422,
-            detail="Insufficient Stock"
+            detail="Insufficient stock"
         )
     
     try:
@@ -241,7 +239,7 @@ async def drop_publish(
         await db.rollback()
         raise HTTPException(
             status_code=409,
-            detail="Database Integrity Error"
+            detail="Database integrity error"
         )
     
     except Exception:

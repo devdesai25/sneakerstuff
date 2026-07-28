@@ -1,16 +1,9 @@
-/* ==========================================
-   SNEAKERSTUFF AUTH REFACTOR
-   Modified by Sneakerstuff Developer
-
-   Login now authenticates using email.
-   Signup collects username + email.
-========================================== */
-
 import { useContext, useState, useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
-import { ShoppingCart, LogOut, User, Calendar, ClipboardList, ShieldAlert, Menu, X } from "lucide-react";
+import { ShoppingCart, LogOut, User, Calendar, ClipboardList, ShieldAlert, Menu, X, Flame } from "lucide-react";
 import api from "../services/api";
+import SneakDropLogo from "./common/SneakDropLogo";
 
 export default function Navbar() {
   const { isLoggedIn, user, logout } = useContext(AuthContext);
@@ -49,15 +42,7 @@ export default function Navbar() {
       <div className="container navbar-container">
         {/* Brand Logo & Icon */}
         <Link to="/" className="navbar-logo" onClick={() => setMobileMenuOpen(false)}>
-          {/* Sneakerstuff minimal shoe cross shoelaces icon */}
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--accent-red)" }}>
-            <path d="m3 21 18-18" />
-            <path d="M7 3h10" />
-            <path d="M7 21h10" />
-            <path d="M3 7v10" />
-            <path d="M21 7v10" />
-          </svg>
-          SNEAKER<span>STUFF</span>
+          <SneakDropLogo size="md" />
         </Link>
 
         {/* Desktop Navigation Links */}

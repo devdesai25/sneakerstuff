@@ -1,10 +1,3 @@
-# ==========================================
-# SNEAKERSTUFF AUTH REFACTOR
-# Modified by Sneakerstuff Developer
-# Purpose:
-# Authentication now uses email instead of username.
-# ==========================================
-
 from fastapi import HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select

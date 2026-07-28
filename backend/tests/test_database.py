@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
-
 DATABASE_URL=(
     "postgresql+asyncpg://postgres:63ZjZQfVXnfhUAyQ@db.qbqlymjwmjublnsgjpbq.supabase.co:5432/postgres"
 )

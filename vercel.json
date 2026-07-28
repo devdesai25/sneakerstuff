@@ -18,12 +18,7 @@
       "dest": "backend/api/index.py"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "frontend/dist/assets/$1"
-    },
-    {
-      "src": "/vite.svg",
-      "dest": "frontend/dist/vite.svg"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",

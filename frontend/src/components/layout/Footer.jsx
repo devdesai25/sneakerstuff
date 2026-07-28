@@ -1,12 +1,5 @@
-/* ==========================================
-   SNEAKERSTUFF AUTH REFACTOR
-   Modified by Sneakerstuff Developer
-
-   Login now authenticates using email.
-   Signup collects username + email.
-========================================== */
-
 import { Link } from "react-router-dom";
+import SneakDropLogo from "../common/SneakDropLogo";
 
 export default function Footer() {
   return (
@@ -15,11 +8,11 @@ export default function Footer() {
         
         {/* Brand & Slogan */}
         <div style={brandColStyle}>
-          <Link to="/" style={logoStyle}>
-            SNEAKER<span>STUFF</span>
+          <Link to="/" style={{ textDecoration: 'none' }}>
+            <SneakDropLogo size="lg" />
           </Link>
           <p style={descStyle}>
-            The ultimate destination for fair sneaker raffles and limited drops. Secure the pairs you want.
+            The ultimate destination for fair sneaker raffles and limited drops. Secure the pairs you want with verified allocations.
           </p>
         </div>
 

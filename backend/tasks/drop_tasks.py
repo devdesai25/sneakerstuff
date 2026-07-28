@@ -1,9 +1,9 @@
 #import redis
 import random
-from fastapi import HTTPException
-from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 import asyncio
+from fastapi import HTTPException
+from sqlalchemy import select, exists
+from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone, timedelta
 
 from backend.celery_app import celery_app, CelerySessionLocal
@@ -77,7 +77,14 @@ async def _select_winners(self, drop_id):
 
 
         try:
-            drop = await get_drop_or_404(drop_id, db)
+            drop = (
+                await db.execute(
+                    select(Drop)
+                    .where(Drop.drop_id == drop_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+
             entries = await get_entries_or_404(drop_id, db)
 
             if not entries:
@@ -91,7 +98,6 @@ async def _select_winners(self, drop_id):
                 .where(Entry.drop_id == drop_id)
                 .order_by(Entry.ranking.asc())
                 .limit(drop.drop_inventory)
-                .options(selectinload(Entry.drop))
             )
             
             result = await db.execute(stmt)
@@ -130,6 +136,8 @@ async def _select_winners(self, drop_id):
                 expire_unpaid_reservations.apply_async(
                     args=[reservation.reservation_id], eta=order.expires_at)
                         
+            drop.status == DropStatus.CLAIMING
+            
             await db.commit()
             #await db.refresh(winners)
             
@@ -154,7 +162,7 @@ async def _expire_unpaid_reservations(self, reservation_id):
                     .where(Reservation.reservation_id == reservation_id)
                     .options(
                         selectinload(Reservation.order),
-                        selectinload(Reservation.entry).selectinload(Entry.drop)
+                        selectinload(Reservation.entry)
                     )
                 )
             ).scalar_one_or_none()
@@ -171,22 +179,23 @@ async def _expire_unpaid_reservations(self, reservation_id):
             if reservation.order:
                 reservation.order.status = OrderStatus.EXPIRED
 
-            drop = reservation.entry.drop
+            drop = (
+                await db.execute(
+                    select(Drop)
+                    .where(Drop.drop_id == reservation.entry.drop_id)
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
             # Increment the drop inventory because the reservation slot is freed up
             drop.drop_inventory += 1
             await db.flush()
-
-            # Retrieve all entry IDs that are currently associated with any reservation
-            res_stmt = select(Reservation.entry_id)
-            res_result = await db.execute(res_stmt)
-            reserved_entry_ids = [r[0] for r in res_result.all()]
 
             # Query the next highest ranked entry that doesn't have a reservation
             stmt = (
                 select(Entry)
                 .where(
                     Entry.drop_id == drop.drop_id,
-                    ~Entry.entry_id.in_(reserved_entry_ids)
+                    ~exists().where(Reservation.entry_id == Entry.entry_id)
                 )
                 .order_by(Entry.ranking.asc())
                 .limit(1)

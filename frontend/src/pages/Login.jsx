@@ -1,11 +1,3 @@
-/* ==========================================
-   SNEAKERSTUFF AUTH REFACTOR
-   Modified by Sneakerstuff Developer
-
-   Login now authenticates using email.
-   Signup collects username + email.
-========================================== */
-
 import { useContext, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";

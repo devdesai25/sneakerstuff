@@ -11,3 +11,7 @@ celery
 redis
 asyncpg
 httpx
+bcrypt==4.0.1
+pytest
+pytest-asyncio
+asgi-lifespan

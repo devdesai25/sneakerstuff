@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.services.auth import req_admin
 from backend.database import get_db
+from backend.enums.drop_status import DropStatus
 from backend.models.users import User
+from backend.models.drops import Drop
 from backend.schemas.drops import DropResponse, DropCreate, DropUpdate
 from backend.services.drop_service import (
     drop_get, drop_create, 
@@ -12,6 +15,15 @@ from backend.services.drop_service import (
 )
 
 router = APIRouter()
+
+@router.get("/drops", response_model = list[DropResponse])
+async def get_public_drops(
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieve all published drops (excluding DRAFT and hidden statuses) for public users."""
+    stmt = select(Drop).where(Drop.status != DropStatus.DRAFT, Drop.is_visible == True)
+    result = await db.execute(stmt)
+    return result.scalars().all()
 
 @router.get("/admin/drop", response_model = list[DropResponse])
 async def get_drop(
@@ -48,7 +60,7 @@ async def delete_drop(
     
     return await drop_delete(id, db)
 
-@router.post("/admin/drop/{id}/cancel", response_model=DropResponse)
+@router.patch("/admin/drop/{id}/cancel", response_model=DropResponse)
 async def cancel_drop(
     id: int,
     admin: User = Depends(req_admin),
@@ -57,10 +69,24 @@ async def cancel_drop(
     
     return await drop_cancel(id, db)
 
-@router.post("/admin/drop/{id}/publish", response_model=DropResponse)
+@router.patch("/admin/drop/{id}/publish", response_model=DropResponse)
 async def publish_drop(
     id: int,
     admin: User = Depends(req_admin),
     db: AsyncSession = Depends(get_db)
 ):
     return await drop_publish(id, db)
+
+@router.patch("/admin/drop/{id}/toggle-visibility", response_model=DropResponse)
+async def toggle_drop_visibility(
+    id: int,
+    admin: User = Depends(req_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Toggle drop visibility status for public users."""
+    from backend.helpers.drop_helpers import get_drop_or_404
+    drop = await get_drop_or_404(id, db)
+    drop.is_visible = not drop.is_visible
+    await db.commit()
+    await db.refresh(drop)
+    return drop

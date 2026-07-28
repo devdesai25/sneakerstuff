@@ -1,11 +1,3 @@
-/* ==========================================
-   SNEAKERSTUFF AUTH REFACTOR
-   Modified by Sneakerstuff Developer
-
-   Login now authenticates using email.
-   Signup collects username + email.
-========================================== */
-
 import { Link } from "react-router-dom";
 import { Heart, ShoppingBag, Eye } from "lucide-react";
 import { useState } from "react";
@@ -13,9 +5,9 @@ import { useState } from "react";
 export default function ProductCard({ product, onAddToCart }) {
   const [isWishlisted, setIsWishlisted] = useState(false);
 
-  // Helper to split brand from title (e.g. "Nike Air Max" -> Brand: "Nike", Model: "Air Max")
+  // Helper to split brand from title (e.g. "Nike Air Max" -> Brand: "NIKE", Model: "AIR MAX")
   const getBrandAndName = (fullName) => {
-    if (!fullName) return { brand: "SNEAKERSTUFF", name: "Limited Edition" };
+    if (!fullName) return { brand: "SNEAKDROP", name: "Limited Edition" };
     const parts = fullName.split(" ");
     if (parts.length > 1) {
       return {
@@ -23,7 +15,7 @@ export default function ProductCard({ product, onAddToCart }) {
         name: parts.slice(1).join(" ")
       };
     }
-    return { brand: "SNEAKERSTUFF", name: fullName };
+    return { brand: "SNEAKDROP", name: fullName };
   };
 
   const { brand, name } = getBrandAndName(product.name);
@@ -37,10 +29,10 @@ export default function ProductCard({ product, onAddToCart }) {
   };
 
   return (
-    <div style={cardStyle}>
+    <div className="snkrs-card" style={cardStyle}>
       {/* Product Image Panel */}
-      <div style={imgContainerStyle}>
-        <Link to={`/products/${product.product_id}`} style={imgLinkStyle}>
+      <div className="hover-zoom" style={imgContainerStyle}>
+        <Link to={`/product/${product.product_id}`} style={imgLinkStyle}>
           <img
             src={product.images || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=600"}
             alt={product.name}
@@ -51,7 +43,7 @@ export default function ProductCard({ product, onAddToCart }) {
           />
         </Link>
 
-        {/* Wishlist Placeholder Heart Toggle */}
+        {/* Wishlist Heart Toggle */}
         <button 
           onClick={() => setIsWishlisted(!isWishlisted)}
           style={wishlistBtnStyle}
@@ -62,16 +54,16 @@ export default function ProductCard({ product, onAddToCart }) {
 
         {/* Stock status badge overlay */}
         {product.stock <= 0 ? (
-          <span className="badge badge-danger" style={badgeOverlayStyle}>Out of Stock</span>
+          <span className="badge badge-danger" style={badgeOverlayStyle}>SOLD OUT</span>
         ) : product.stock <= 5 ? (
-          <span className="badge badge-warning" style={badgeOverlayStyle}>Only {product.stock} left</span>
+          <span className="badge badge-warning" style={badgeOverlayStyle}>ONLY {product.stock} LEFT</span>
         ) : null}
       </div>
 
       {/* Product Info Panel */}
       <div style={infoStyle}>
         <div style={brandStyle}>{brand}</div>
-        <Link to={`/products/${product.product_id}`}>
+        <Link to={`/product/${product.product_id}`}>
           <h3 style={titleStyle}>{name}</h3>
         </Link>
         <div style={priceRowStyle}>
@@ -81,7 +73,7 @@ export default function ProductCard({ product, onAddToCart }) {
 
       {/* Action Buttons Footer */}
       <div style={actionsContainerStyle}>
-        <Link to={`/products/${product.product_id}`} className="btn btn-outline" style={{ flex: 1, padding: "10px", fontSize: "11px", gap: "4px" }}>
+        <Link to={`/product/${product.product_id}`} className="btn btn-outline" style={{ flex: 1, padding: "10px", fontSize: "11px", gap: "4px" }}>
           <Eye size={13} /> DETAILS
         </Link>
         {onAddToCart && (

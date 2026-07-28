@@ -1,10 +1,3 @@
-# ==========================================
-# SNEAKERSTUFF AUTH REFACTOR
-# Modified by Sneakerstuff Developer
-# Purpose:
-# Vercel entrypoint path resolution.
-# ==========================================
-
 import sys
 import os
 

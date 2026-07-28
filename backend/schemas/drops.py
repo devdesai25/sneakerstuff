@@ -19,6 +19,7 @@ class DropResponse(BaseModel):
     product_price : Decimal | None = None
     product_name : str | None = None
     product_image : str | None = None
+    is_visible : bool
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -27,6 +28,7 @@ class DropCreate(BaseModel):
     opens_at : datetime
     closes_at : datetime
     drop_inventory : int
+    is_visible : bool = True
 
 class DropUpdate(BaseModel):
     opens_at : Optional[datetime] = None
@@ -35,3 +37,4 @@ class DropUpdate(BaseModel):
     product_price : Optional[float] = None
     product_name : Optional[float] = None
     product_image : Optional[str] = None
+    is_visible : Optional[bool] = None

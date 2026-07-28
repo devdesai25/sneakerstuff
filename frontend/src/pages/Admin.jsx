@@ -11,7 +11,7 @@ import { useState, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { useToast } from "../components/common/Toast";
 import api from "../services/api";
-import { ShieldCheck, Plus, Trash2, Edit3, Calendar, Eye, Ban, Send, RefreshCw } from "lucide-react";
+import { ShieldCheck, Plus, Trash2, Edit3, Calendar, Eye, EyeOff, Ban, Send, RefreshCw } from "lucide-react";
 
 export default function Admin() {
   const queryClient = useQueryClient();
@@ -55,6 +55,28 @@ export default function Admin() {
       return res.data;
     },
     enabled: user?.role === "admin",
+  });
+
+  // Search and filter states
+  const [productSearch, setProductSearch] = useState("");
+  const [productFilter, setProductFilter] = useState("");
+  const [dropFilter, setDropFilter] = useState("");
+
+  const filteredProducts = products.filter((prod) =>
+    prod.name.toLowerCase().includes(productSearch.toLowerCase())
+  );
+
+  const filteredAdminProducts = products.filter((prod) =>
+    prod.name.toLowerCase().includes(productFilter.toLowerCase())
+  );
+
+  const filteredAdminDrops = drops.filter((drop) => {
+    const term = dropFilter.toLowerCase();
+    return (
+      drop.drop_id.toString().includes(term) ||
+      (drop.product_name || "").toLowerCase().includes(term) ||
+      drop.status.toLowerCase().includes(term)
+    );
   });
 
   // Product Mutations
@@ -107,10 +129,24 @@ export default function Admin() {
     onSuccess: () => {
       toast.success("Drop scheduled successfully!");
       queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
-      setDropForm({ product_id: "", opens_at: "", closes_at: "", drop_inventory: "" });
+      setDropForm({ id: "", product_id: "", opens_at: "", closes_at: "", drop_inventory: "" });
     },
     onError: (err) => {
       toast.error(err.response?.data?.detail || "Failed to schedule drop.");
+    },
+  });
+
+  const updateDropMutation = useMutation({
+    mutationFn: async ({ id, payload }) => {
+      return await api.patch(`/admin/drop/${id}`, payload);
+    },
+    onSuccess: () => {
+      toast.success("Drop updated successfully!");
+      queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
+      setDropForm({ id: "", product_id: "", opens_at: "", closes_at: "", drop_inventory: "" });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to update drop.");
     },
   });
 
@@ -137,6 +173,19 @@ export default function Admin() {
     },
     onError: (err) => {
       toast.error(err.response?.data?.detail || "Failed to cancel drop.");
+    },
+  });
+
+  const toggleVisibilityMutation = useMutation({
+    mutationFn: async (id) => {
+      return await api.post(`/admin/drop/${id}/toggle-visibility`);
+    },
+    onSuccess: () => {
+      toast.success("Visibility updated.");
+      queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to update visibility.");
     },
   });
 
@@ -183,7 +232,21 @@ export default function Admin() {
       closes_at: new Date(dropForm.closes_at).toISOString(),
       drop_inventory: parseInt(dropForm.drop_inventory, 10),
     };
-    createDropMutation.mutate(payload);
+    if (dropForm.id) {
+      updateDropMutation.mutate({ id: dropForm.id, payload });
+    } else {
+      createDropMutation.mutate(payload);
+    }
+  };
+
+  const fillDropForm = (drop) => {
+    setDropForm({
+      id: drop.drop_id,
+      product_id: drop.product_id,
+      opens_at: drop.opens_at ? drop.opens_at.slice(0, 16) : "",
+      closes_at: drop.closes_at ? drop.closes_at.slice(0, 16) : "",
+      drop_inventory: drop.drop_inventory,
+    });
   };
 
   const fillProductForm = (prod) => {
@@ -310,8 +373,16 @@ export default function Admin() {
           {/* List panel */}
           <div className="premium-panel" style={listCardStyle}>
             <h3 style={listTitleStyle}>PRODUCT LIST</h3>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Search products by name..."
+              value={productFilter}
+              onChange={(e) => setProductFilter(e.target.value)}
+              style={{ marginBottom: "16px", fontSize: "12px", height: "36px" }}
+            />
             <div style={listScrollStyle}>
-              {products.map((prod) => (
+              {filteredAdminProducts.map((prod) => (
                 <div key={prod.product_id} style={listItemStyle}>
                   <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                     <img 
@@ -351,11 +422,21 @@ export default function Admin() {
         <div style={panelGridStyle}>
           {/* Create Drop Form */}
           <div className="premium-panel" style={formCardStyle}>
-            <h3 style={formTitleStyle}>SCHEDULE DROP DRAW</h3>
+            <h3 style={formTitleStyle}>
+              {dropForm.id ? "UPDATE DROP DRAW" : "SCHEDULE DROP DRAW"}
+            </h3>
 
             <form onSubmit={handleDropSubmit}>
               <div className="form-group">
                 <label className="form-label">Target Product ID</label>
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Filter dropdown list by name..."
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.target.value)}
+                  style={{ marginBottom: "8px", fontSize: "12px", height: "36px" }}
+                />
                 <select
                   className="input-field"
                   value={dropForm.product_id}
@@ -364,7 +445,7 @@ export default function Admin() {
                   required
                 >
                   <option value="">-- Choose a sneaker --</option>
-                  {products.map((prod) => (
+                  {filteredProducts.map((prod) => (
                     <option key={prod.product_id} value={prod.product_id}>
                       {prod.name} (stock: {prod.stock})
                     </option>
@@ -415,8 +496,16 @@ export default function Admin() {
           {/* Drops List */}
           <div className="premium-panel" style={listCardStyle}>
             <h3 style={listTitleStyle}>ORCHESTRATED DROPS</h3>
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Search drops by name, ID or status..."
+              value={dropFilter}
+              onChange={(e) => setDropFilter(e.target.value)}
+              style={{ marginBottom: "16px", fontSize: "12px", height: "36px" }}
+            />
             <div style={listScrollStyle}>
-              {drops.map((drop) => (
+              {filteredAdminDrops.map((drop) => (
                 <div key={drop.drop_id} style={listItemStyle}>
                   <div>
                     <h4 style={{ fontSize: "14px" }}>
@@ -430,7 +519,20 @@ export default function Admin() {
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", maxWidth: "160px" }}>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "flex-end", maxWidth: "180px" }}>
+                    <button
+                      onClick={() => toggleVisibilityMutation.mutate(drop.drop_id)}
+                      className="btn btn-outline"
+                      style={{ 
+                        ...actionBtnTinyStyle, 
+                        color: drop.is_visible ? "var(--text-primary)" : "var(--text-muted)",
+                        borderColor: drop.is_visible ? "var(--border-color)" : "dotted var(--border-color)"
+                      }}
+                      title={drop.is_visible ? "Hide from Public Page" : "Show on Public Page"}
+                    >
+                      {drop.is_visible ? <Eye size={11} /> : <EyeOff size={11} />}
+                      {drop.is_visible ? " Visible" : " Hidden"}
+                    </button>
                     {drop.status === "DRAFT" && (
                       <>
                         <button
@@ -440,6 +542,14 @@ export default function Admin() {
                           title="Publish & Schedule Tasks"
                         >
                           <Send size={11} /> Publish
+                        </button>
+                        <button
+                          onClick={() => fillDropForm(drop)}
+                          className="btn btn-outline"
+                          style={actionBtnTinyStyle}
+                          title="Edit Drop"
+                        >
+                          <Edit3 size={11} /> Edit
                         </button>
                         <button
                           onClick={() => deleteDropMutation.mutate(drop.drop_id)}

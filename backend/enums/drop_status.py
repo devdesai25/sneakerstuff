@@ -10,3 +10,28 @@ class DropStatus(str, Enum):
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
     PAUSED = "PAUSED"
+
+CANCELLABLE_STATES = frozenset({
+    DropStatus.DRAFT,
+    DropStatus.SCHEDULED,
+    DropStatus.ENTRY_OPEN,
+    DropStatus.ENTRY_CLOSED,
+})
+
+STOCK_RESERVED_STATES = frozenset({
+    DropStatus.SCHEDULED,
+    DropStatus.ENTRY_OPEN,
+    DropStatus.ENTRY_CLOSED,
+})
+
+UPDATABLE_STATES = frozenset({
+    DropStatus.DRAFT,
+})
+
+PUBLISHABLE_STATES = frozenset({
+    DropStatus.DRAFT,
+})
+
+DELETABLE_STATES = frozenset({
+    DropStatus.DRAFT,
+})

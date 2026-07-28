@@ -7,40 +7,43 @@
 ========================================== */
 
 :root {
-  --font-display: 'Outfit', sans-serif;
-  --font-body: 'Plus Jakarta Sans', sans-serif;
+  --font-display: 'Bebas Neue', 'Outfit', sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
 
-  /* Theme: Foot Locker Premium Streetwear (White/Black/Red) */
-  --bg-main: #ffffff;
-  --bg-card: #ffffff;
-  --bg-secondary: #f6f6f6;
-  --bg-input: #ffffff;
+  /* Theme: Nike / Foot Locker Athletic Streetwear (Dark Pitch Black, High Voltage Red, Crisp White) */
+  --bg-main: #0A0A0A;
+  --bg-card: #141414;
+  --bg-secondary: #1E1E20;
+  --bg-input: #18181B;
   
-  --border-color: #e5e5e5;
-  --border-focus: #111111;
+  --border-color: #27272A;
+  --border-focus: #FF2A00;
   
   /* Brand Accents */
-  --accent-red: #e30613; /* Foot Locker Red */
+  --accent-red: #FF2A00; /* High Voltage Electric Red */
+  --accent-volt: #CCFF00; /* Volt Green Accent */
   
-  --text-primary: #111111;
-  --text-muted: #555555;
-  --text-white: #ffffff;
+  --text-primary: #FFFFFF;
+  --text-muted: #A1A1AA;
+  --text-white: #FFFFFF;
+  --text-dark: #09090B;
   
-  --success: #0f8b5a;
-  --warning: #d97706;
-  --error: #e30613;
-  --info: #2563eb;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  --info: #3B82F6;
 
   --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.05);
-  --shadow-lg: 0 12px 24px rgba(0,0,0,0.08);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.6);
 
-  --border-radius-sm: 4px;
-  --border-radius-md: 8px;
-  --border-radius-lg: 0px; /* Sharp corners for professional shoe sites like Nike/FL */
+  --border-radius-sm: 2px;
+  --border-radius-md: 4px;
+  --border-radius-lg: 0px; /* Sharp angles for Nike / SNKRS look */
   --border-radius-full: 9999px;
 }
 
@@ -236,6 +239,78 @@ button, input, textarea, select {
 .badge-neon {
   background-color: #111111;
   color: var(--text-white);
+}
+
+/* Ticker Bar Animation */
+.ticker-wrap {
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--accent-red);
+  color: #FFFFFF;
+  padding: 10px 0;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.ticker-move {
+  display: inline-block;
+  animation: ticker 30s linear infinite;
+}
+
+@keyframes ticker {
+  0% { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
+}
+
+/* Hover Zoom & Micro Interaction Effects */
+.hover-zoom {
+  overflow: hidden;
+}
+.hover-zoom img {
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.hover-zoom:hover img {
+  transform: scale(1.06);
+}
+
+/* SNKRS Card Styling */
+.snkrs-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-normal);
+  position: relative;
+}
+.snkrs-card:hover {
+  border-color: var(--accent-red);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Timer Countdown Box */
+.timer-box {
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 10px 14px;
+  border-radius: var(--border-radius-sm);
+  text-align: center;
+  min-width: 60px;
+}
+.timer-num {
+  font-family: var(--font-display);
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+.timer-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
 }
 
 /* Layout Panels */

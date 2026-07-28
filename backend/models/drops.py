@@ -1,5 +1,5 @@
 from backend.database import Base
-from sqlalchemy import Column, ForeignKey, PrimaryKeyConstraint, Integer, String, DateTime, Numeric
+from sqlalchemy import Column, ForeignKey, PrimaryKeyConstraint, Integer, String, DateTime, Numeric, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -57,6 +57,13 @@ class Drop(Base):
     status = Column(
         String, 
         nullable=False
+    )
+
+    is_visible = Column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true"
     )
 
     product = relationship(

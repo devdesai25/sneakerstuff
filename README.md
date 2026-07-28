@@ -21,7 +21,7 @@ The limited-edition sneaker and streetwear industry (Air Jordans, Yeezys, Travis
 2. **Bot-Free Entry**: Authenticated, verified users register a single draw entry per drop with a validated shipping address before the timer expires.
 3. **Async Winner Selection**: When a drop closes, background Celery workers trigger a deterministic, concurrency-safe draw algorithm using database row locks (`SELECT FOR UPDATE`).
 4. **Reservation & Price Snapshotting**: Selected winners receive a temporary, price-locked inventory reservation.
-5. **Checkout & Fulfillment**: Winners convert their reservation into a confirmed order, settling payment seamlessly via Razorpay integration.
+5. **Checkout & Payment**: Winners convert their reservation into a confirmed order and settle payment directly via simulated checkout flow within a 10-minute expiration window.
 
 ---
 
@@ -35,7 +35,7 @@ The limited-edition sneaker and streetwear industry (Air Jordans, Yeezys, Travis
 | **Database** | PostgreSQL / Supabase | Relational data store supporting row-level concurrency locking |
 | **Task Queue** | Celery + Redis | Asynchronous background worker processing for automated drop draw execution |
 | **Caching / Broker** | Redis | High-speed message broker and semantic cache for drop state & sessions |
-| **Payment Gateway** | Razorpay SDK | Secure online payment settlement (amounts computed in paise) |
+| **Payment Flow** | Native Sandbox Settlement | Concurrency-safe order payment settlement (`PENDING` ➔ `PAID`) with stock timeouts |
 | **Frontend UI** | React 19 + Vite | SPA built with modern hooks, fast HMR, and Nike/Foot Locker athletic styling |
 | **State & Data Fetching** | TanStack React Query | Client-side cache management, optimistic updates, and background refetching |
 | **Styling & Motion** | Vanilla CSS + Framer Motion | Custom streetwear design tokens, micro-interactions, and SNKRS drop timers |
@@ -85,14 +85,11 @@ The limited-edition sneaker and streetwear industry (Air Jordans, Yeezys, Travis
 3. **Concurrency-Safe Winner Selection (`SELECT FOR UPDATE`)**:
    During automated raffle draw processing, the database row for each eligible entry and product inventory is locked via `SELECT FOR UPDATE`. This guarantees zero race conditions or over-allocations when multiple workers evaluate inventory allocations simultaneously.
 
-4. **Price Snapshotting on Reservation & Order Propagation**:
-   When a raffle winner is drawn, a `Reservation` is created with a hardcoded snapshot of the product price at draw time (`unit_price`). This price propagates strictly down to `Order`, `OrderItem`, and Razorpay charge calculations, protecting users from mid-checkout price mutations.
+4. **Price Snapshotting & Expiration Management**:
+   When an order is created, product prices are snapshotted onto `OrderItem` records with a strict 10-minute expiration window (`expires_at`). If an order is not settled before expiry, stock is automatically restored to product inventory.
 
-5. **Single Source of Truth for Order Status**:
-   Order lifecycle states are collapsed into a unified status enum (`PENDING_PAYMENT`, `PAID`, `CANCELLED`, `COMPLETED`), eliminating state sync bugs between payment webhooks and inventory allocation tables.
-
-6. **Non-Blocking Razorpay Payment Processing (`asyncio.to_thread`)**:
-   Razorpay's official Python SDK relies on synchronous HTTP requests. To avoid blocking FastAPI's async event loop during payment order creation or verification, SDK calls are safely dispatched via `asyncio.to_thread()`.
+5. **Single Source of Truth for Order Lifecycle**:
+   Order lifecycle states are managed through a single `status` field (`PENDING`, `PAID`, `CANCELLED`, `EXPIRED`), ensuring deterministic transaction boundaries without duplicate status columns.
 
 ---
 
@@ -101,8 +98,8 @@ The limited-edition sneaker and streetwear industry (Air Jordans, Yeezys, Travis
 - 👟 **Drop Management & Publishing**: Admin control panel for staging drops in `DRAFT`, scheduling launch windows, locking dedicated inventory, and transitioning status (`SCHEDULED` ➔ `ENTRY_OPEN` ➔ `ENTRY_CLOSED` ➔ `COMPLETED`).
 - 🎟️ **Bot-Free Raffle Entry System**: Enforces 1 entry per authenticated user per drop with shipping address verification.
 - 🎲 **Automated Winner Draw Algorithm**: Celery background task randomly selects winners up to the specified `drop_inventory` count, automatically creating reserved allocations.
-- 💳 **Razorpay Checkout Integration**: Seamless payment processing supporting test and live modes. Automatic conversion of USD/INR values into integer paise for precision.
-- 📊 **Order Lifecycle Management**: Order creation from winning reservations, tracking payment status, and automated inventory reconciliation.
+- 💳 **Order Settlement & Checkout**: Sandbox-ready order payment settlement (`PATCH /api/orders/{id}/pay`) with automatic 10-minute stock reservation timeout.
+- 📊 **Order Lifecycle Management**: Cart-to-order conversion, stock deduction locking, payment timestamp tracking (`paid_at`), and order cancellation workflows.
 
 ---
 
@@ -120,18 +117,21 @@ The limited-edition sneaker and streetwear industry (Air Jordans, Yeezys, Travis
 │     Drop      │──────────────────>│  Reservation  │
 └───────┬───────┘                   └───────┬───────┘
         │ 1:1                               │
-        ▼                                   ▼ 1:1
+        ▼                                   ▼ 1:N
 ┌───────────────┐        1:N        ┌───────────────┐
-│    Product    │<──────────────────│    Order      │
-└───────────────┘                   └───────────────┘
+│    Product    │<──────────────────│   OrderItem   │
+└───────────────┘                   └───────▲───────┘
+                                            │ 1:N
+                                    ┌───────┴───────┐
+                                    │    Order      │
+                                    └───────────────┘
 ```
 
 - **User**: Authentication credentials (`username`, `email`, `hashed_password`), role (`user` / `admin`).
 - **Product**: Master inventory record (`product_id`, `name`, `price`, `stock`, `images`).
 - **Drop**: Raffle drop window (`opens_at`, `closes_at`, `drop_inventory`, `status`).
 - **Entry**: User raffle submission (`drop_id`, `user_id`, `address`, `created_at`).
-- **Reservation**: Winning raffle allocation (`entry_id`, `user_id`, `unit_price`, `expires_at`).
-- **Order / OrderItem**: Purchased order records (`total_amount`, `status`, `razorpay_order_id`).
+- **Order / OrderItem**: Purchased order records (`total_amount`, `status`, `expires_at`, `paid_at`).
 
 ---
 
@@ -191,7 +191,6 @@ Ensure the following tools are installed on your environment:
 - **Node.js**: `v18.0+`
 - **PostgreSQL**: `v14+` (or Supabase URI)
 - **Redis**: `v6+`
-- **Razorpay Account**: Test key ID & secret key for sandbox payments
 
 ---
 
@@ -226,14 +225,10 @@ Create a `.env` file in the root directory:
 DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/sneakdrop
 REDIS_URL=redis://localhost:6379/0
 
-# Security & JWT
+# Security & JWT Token Key
 SECRET_KEY=your_super_secret_jwt_key_here
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=1440
-
-# Razorpay Sandbox Credentials
-RAZORPAY_KEY_ID=rzp_test_YourKeyIdHere
-RAZORPAY_KEY_SECRET=YourKeySecretHere
 
 # Frontend URL
 FRONTEND_URL=http://localhost:5173
@@ -319,12 +314,11 @@ curl -X POST "http://localhost:8000/api/drops/1/entries" \
   -d '{"address": "742 Evergreen Terrace, Springfield"}'
 ```
 
-### 2. Create Razorpay Payment Order (`POST /api/orders`)
+### 2. Settle Order Payment (`PATCH /api/orders/{id}/pay`)
 ```bash
-curl -X POST "http://localhost:8000/api/orders" \
+curl -X PATCH "http://localhost:8000/api/orders/1/pay" \
   -H "Authorization: Bearer <YOUR_JWT_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"reservation_id": 10}'
+  -H "Content-Type: application/json"
 ```
 
 ---
@@ -332,6 +326,7 @@ curl -X POST "http://localhost:8000/api/orders" \
 ## 🔮 Future Roadmap
 
 - 📱 **Native Push Notifications**: Integrate WebPush and FCM for instant shock drop alerts.
+- 💳 **External Payment Gateway**: Optional Razorpay / Stripe webhook integration for live production card processing.
 - ⚡ **WebSocket Live Draw**: Real-time canvas animation during active raffle winner selection.
 - 🛡️ **Advanced Fraud Detection**: IP rate-limiting and device fingerprinting to enforce 100% human drawing entries.
 

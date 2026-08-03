@@ -52,7 +52,10 @@ export default function Drops() {
 
   const [activeDropId, setActiveDropId] = useState(null);
   const [address, setAddress] = useState("");
+  const [selectedSize, setSelectedSize] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
+
+  const STANDARD_SIZES = ["US 7", "US 7.5", "US 8", "US 8.5", "US 9", "US 9.5", "US 10", "US 10.5", "US 11", "US 11.5", "US 12"];
 
   // 1. Fetch drops (Publicly browseable)
   // Queries '/drops'. If it fails with 404, we catch the error and load MOCK_FALLBACK_DROPS.
@@ -84,15 +87,16 @@ export default function Drops() {
 
   // 3. Register user entry for drop
   const enterRaffleMutation = useMutation({
-    mutationFn: async ({ dropId, shippingAddress }) => {
+    mutationFn: async ({ dropId, shippingAddress, size }) => {
       // Backend POST route to register drawing entries
-      return await api.post(`/drops/${dropId}/entries`, { address: shippingAddress });
+      return await api.post(`/drops/${dropId}/entries`, { address: shippingAddress, size });
     },
     onSuccess: () => {
       toast.success("Raffle entry submitted successfully!");
       queryClient.invalidateQueries({ queryKey: ["my-entries"] });
       setActiveDropId(null);
       setAddress("");
+      setSelectedSize("");
     },
     onError: (err) => {
       // Gracefully catches any backend syntax errors (e.g. the db.add argument crash)
@@ -116,7 +120,11 @@ export default function Drops() {
       toast.error("Please enter a shipping address");
       return;
     }
-    enterRaffleMutation.mutate({ dropId: activeDropId, shippingAddress: address });
+    if (!selectedSize) {
+      toast.error("Please select your shoe size");
+      return;
+    }
+    enterRaffleMutation.mutate({ dropId: activeDropId, shippingAddress: address, size: selectedSize });
   };
 
   // Helper to cross-reference entries from /users/me/entries as a fallback logic
@@ -281,10 +289,38 @@ export default function Drops() {
           <div className="premium-panel animate-fade-in" style={modalContentStyle}>
             <div style={modalHeaderStyle}>
               <h3>Enter Sneaker Draw</h3>
-              <button onClick={() => setActiveDropId(null)} style={closeBtnStyle}>✕</button>
+              <button onClick={() => { setActiveDropId(null); setSelectedSize(""); }} style={closeBtnStyle}>✕</button>
             </div>
             
             <form onSubmit={handleRegisterEntry} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              <div className="form-group">
+                <label className="form-label">Select Size</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {STANDARD_SIZES.map(sz => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setSelectedSize(sz)}
+                      style={{
+                        width: '50px',
+                        padding: '8px 0',
+                        textAlign: 'center',
+                        border: selectedSize === sz ? '2px solid var(--accent-red)' : '1px solid var(--border-color)',
+                        backgroundColor: selectedSize === sz ? 'rgba(227, 6, 19, 0.1)' : 'var(--bg-input)',
+                        color: 'var(--text-primary)',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontFamily: 'var(--font-display)',
+                        fontWeight: selectedSize === sz ? '800' : '500',
+                        fontSize: '11px',
+                      }}
+                    >
+                      {sz}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Shipping Address</label>
                 <div style={{ position: "relative" }}>
@@ -306,7 +342,7 @@ export default function Drops() {
                 <button
                   type="button"
                   className="btn btn-outline"
-                  onClick={() => setActiveDropId(null)}
+                  onClick={() => { setActiveDropId(null); setSelectedSize(""); }}
                   disabled={enterRaffleMutation.isPending}
                 >
                   CANCEL
@@ -314,7 +350,7 @@ export default function Drops() {
                 <button
                   type="submit"
                   className="btn btn-accent"
-                  disabled={enterRaffleMutation.isPending}
+                  disabled={enterRaffleMutation.isPending || !selectedSize}
                   style={{ gap: "8px" }}
                 >
                   {enterRaffleMutation.isPending ? "SUBMITTING..." : <>SUBMIT ENTRY <Send size={14} /></>}

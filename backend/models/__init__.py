@@ -6,3 +6,4 @@ from .drops import Drop
 from .reservations import Reservation
 from .cart_items import CartItem
 from .order_items import OrderItem
+from .product_sizes import ProductSize

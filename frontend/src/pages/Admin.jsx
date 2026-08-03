@@ -20,6 +20,14 @@ export default function Admin() {
 
   // Active sub-sections tabs: "products" or "drops"
   const [activeTab, setActiveTab] = useState("products");
+  
+  const STANDARD_SIZES = ["US 7", "US 7.5", "US 8", "US 8.5", "US 9", "US 9.5", "US 10", "US 10.5", "US 11", "US 11.5", "US 12"];
+
+  const [sizes, setSizes] = useState(
+    STANDARD_SIZES.map(s => ({ size: s, stock: 0 }))
+  );
+  
+  const totalStock = sizes.reduce((acc, curr) => acc + (parseInt(curr.stock) || 0), 0);
 
   // Form States - Product Create/Update
   const [productForm, setProductForm] = useState({
@@ -204,6 +212,7 @@ export default function Admin() {
 
   const resetProductForm = () => {
     setProductForm({ id: "", name: "", price: "", description: "", stock: "", images: "" });
+    setSizes(STANDARD_SIZES.map(s => ({ size: s, stock: 0 })));
   };
 
   const handleProductSubmit = (e) => {
@@ -212,7 +221,8 @@ export default function Admin() {
       name: productForm.name,
       price: parseFloat(productForm.price),
       description: productForm.description,
-      stock: parseInt(productForm.stock, 10),
+      stock: totalStock,
+      sizes: sizes,
       images: productForm.images || "",
     };
 
@@ -258,6 +268,15 @@ export default function Admin() {
       stock: prod.stock.toString(),
       images: prod.images || "",
     });
+
+    if (prod.sizes && Array.isArray(prod.sizes) && prod.sizes.length > 0) {
+      setSizes(STANDARD_SIZES.map(s => {
+        const found = prod.sizes.find(ps => ps.size === s);
+        return { size: s, stock: found ? found.stock : 0 };
+      }));
+    } else {
+      setSizes(STANDARD_SIZES.map(s => ({ size: s, stock: 0 })));
+    }
   };
 
   return (
@@ -321,15 +340,37 @@ export default function Admin() {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Stock Qty</label>
+                  <label className="form-label">Total Stock</label>
                   <input
                     type="number"
                     className="input-field"
-                    value={productForm.stock}
-                    onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
-                    placeholder="25"
-                    required
+                    value={totalStock}
+                    disabled
+                    style={{ backgroundColor: "var(--bg-secondary)", cursor: "not-allowed" }}
                   />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Size Inventory (Pairs)</label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "16px" }}>
+                  {sizes.map((sObj, idx) => (
+                    <div key={sObj.size} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontSize: "12px", width: "50px", color: "var(--text-muted)", fontWeight: "600" }}>{sObj.size}</span>
+                      <input
+                        type="number"
+                        className="input-field"
+                        style={{ padding: "6px", height: "30px", fontSize: "12px" }}
+                        min="0"
+                        value={sObj.stock}
+                        onChange={(e) => {
+                          const newSizes = [...sizes];
+                          newSizes[idx].stock = parseInt(e.target.value) || 0;
+                          setSizes(newSizes);
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
 

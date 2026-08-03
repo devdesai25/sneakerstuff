@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -35,6 +36,7 @@ async def get_products(
     all_prod = (
         await db.execute(
             select(Product)
+            .options(selectinload(Product.sizes))
             .offset(offset)
             .limit(limit)
         )

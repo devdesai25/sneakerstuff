@@ -172,7 +172,10 @@ export default function Cart() {
                   <Link to={`/product/${item.product_id}`} style={itemTitleLinkStyle}>
                     <h3 style={itemTitleStyle}>{item.name}</h3>
                   </Link>
-                  <span style={itemPriceStyle}>${Number(item.price).toFixed(2)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={itemPriceStyle}>${Number(item.price).toFixed(2)}</span>
+                    {item.size && <span style={sizeBadgeStyle}>{item.size}</span>}
+                  </div>
 
                   <div style={qtyControlsWrapperStyle}>
                     <div style={qtyControlsStyle}>
@@ -321,6 +324,17 @@ const itemPriceStyle = {
   color: "var(--text-muted)",
   fontSize: "14px",
   fontWeight: "600",
+};
+
+const sizeBadgeStyle = {
+  display: 'inline-block',
+  padding: '2px 6px',
+  backgroundColor: 'var(--bg-input)',
+  border: '1px solid var(--border-color)',
+  borderRadius: '12px',
+  fontSize: '11px',
+  fontWeight: '700',
+  color: 'var(--text-muted)',
 };
 
 const qtyControlsWrapperStyle = {

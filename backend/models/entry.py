@@ -35,6 +35,12 @@ class Entry(Base):
         String,
         nullable=False
     )
+
+    size = Column(
+        String,
+        nullable=False,
+        default="US 9"
+    )
     user = relationship(
         "User",
         back_populates="entries"

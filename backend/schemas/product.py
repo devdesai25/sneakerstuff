@@ -6,7 +6,20 @@
 # ==========================================
 
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Optional, List
+
+class ProductSizeSchema(BaseModel):
+    size: str
+    stock: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ProductSizeResponse(BaseModel):
+    id: int
+    size: str
+    stock: int
+
+    model_config = ConfigDict(from_attributes=True)
 
 class ProductResponse(BaseModel):
     product_id : int
@@ -15,6 +28,7 @@ class ProductResponse(BaseModel):
     price : float
     stock: int
     images: str | None = None
+    sizes: List[ProductSizeResponse] = []
     
     model_config = ConfigDict(from_attributes=True)
     
@@ -24,6 +38,7 @@ class ProductUpdate(BaseModel):
     stock : Optional[int] = None
     price : Optional[float] = None
     images: str | None = None
+    sizes: Optional[List[ProductSizeSchema]] = None
     
 class ProductCreate(BaseModel):
 
@@ -32,3 +47,4 @@ class ProductCreate(BaseModel):
     stock : int
     price : float 
     images: str | None = None
+    sizes: List[ProductSizeSchema] = []

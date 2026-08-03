@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from backend.models.products import Product
+from backend.models.product_sizes import ProductSize
 from backend.models.cart_items import CartItem
 from backend.models.users import User
 from backend.schemas.cart_items import CartPatch, CartCreate
@@ -25,8 +26,24 @@ async def cart_add(
             status_code= 404,
             detail= "Product Not found"
         )
+        
+    product_size = (
+        await db.execute(
+            select(ProductSize).where(
+                ProductSize.product_id == cur_cart.product_id,
+                ProductSize.size == cur_cart.size
+            )
+        )
+    ).scalar_one_or_none()
+    
+    if not product_size:
+        raise HTTPException(
+            status_code=404,
+            detail="Product size not found"
+        )
+        
     """Check Available quantity before creating cart"""
-    if product.stock < cur_cart.quantity:
+    if product_size.stock < cur_cart.quantity:
         raise HTTPException(
             status_code= 409,
             detail="Product is out of stock"
@@ -34,7 +51,11 @@ async def cart_add(
     
     cart = (
         await db.execute(
-            select(CartItem).where(CartItem.user_id == user.id, CartItem.product_id == cur_cart.product_id)
+            select(CartItem).where(
+                CartItem.user_id == user.id, 
+                CartItem.product_id == cur_cart.product_id,
+                CartItem.size == cur_cart.size
+            )
         )
     ).scalar_one_or_none()
     
@@ -43,7 +64,8 @@ async def cart_add(
             add_to_cart = CartItem(
                 user_id = user.id,
                 product_id = cur_cart.product_id,
-                quantity = cur_cart.quantity
+                quantity = cur_cart.quantity,
+                size = cur_cart.size
             )
 
             db.add(add_to_cart)
@@ -59,7 +81,7 @@ async def cart_add(
                 detail="Database Integrity Error"
             )
         
-    if product.stock < (cur_cart.quantity + cart.quantity):
+    if product_size.stock < (cur_cart.quantity + cart.quantity):
        raise HTTPException(
            status_code=409,
            detail = "Stock unavailable"

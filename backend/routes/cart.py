@@ -42,7 +42,8 @@ async def get_cart(
         "name": item.product.name,
         "price": item.product.price,
         "image": item.product.images,
-        "quantity": item.quantity
+        "quantity": item.quantity,
+        "size": item.size
     }
     for item in cart
     ]

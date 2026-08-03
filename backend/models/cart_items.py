@@ -1,6 +1,6 @@
 from backend.database import Base
 from sqlalchemy.sql import func
-from sqlalchemy import String, Integer, ForeignKey,DateTime, Column, UniqueConstraint
+from sqlalchemy import String, Integer, ForeignKey, DateTime, Column, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 class CartItem(Base):
@@ -14,6 +14,8 @@ class CartItem(Base):
 
     quantity = Column(Integer, nullable=False)
 
+    size = Column(String, nullable=False, default="US 9")
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -21,7 +23,8 @@ class CartItem(Base):
         UniqueConstraint(
             "user_id",
             "product_id",
-            name="unique_user_product"
+            "size",
+            name="unique_user_product_size"
         ),
     )
     

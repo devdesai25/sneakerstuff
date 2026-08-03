@@ -121,7 +121,8 @@ async def _select_winners(self, drop_id):
                     product_id = winner.drop.product_id,
                     quantity = 1,
                     unit_price = drop.product_price,
-                    subtotal = drop.product_price
+                    subtotal = drop.product_price,
+                    size = winner.size
                 )
                 db.add(order_item)
                 drop.drop_inventory -= 1
@@ -225,7 +226,8 @@ async def _expire_unpaid_reservations(self, reservation_id):
                     product_id = drop.product_id,
                     quantity = 1,
                     unit_price = drop.product_price,
-                    subtotal = drop.product_price
+                    subtotal = drop.product_price,
+                    size = new_winner.size
                 )
                 db.add(new_order_item)
 

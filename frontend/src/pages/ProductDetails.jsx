@@ -15,6 +15,9 @@ export default function ProductDetails() {
   const { isLoggedIn } = useContext(AuthContext);
 
   const [quantity, setQuantity] = useState(1);
+  const [selectedSize, setSelectedSize] = useState("");
+
+  const STANDARD_SIZES = ["US 7", "US 7.5", "US 8", "US 8.5", "US 9", "US 9.5", "US 10", "US 10.5", "US 11", "US 11.5", "US 12"];
 
   // Fetch all products to find details by ID locally (FastAPI lacks GET /products/{id})
   const { 
@@ -35,13 +38,14 @@ export default function ProductDetails() {
 
   // Add to cart mutation
   const addToCartMutation = useMutation({
-    mutationFn: async ({ productId, qty }) => {
+    mutationFn: async ({ productId, qty, size }) => {
       if (!isLoggedIn) {
         throw new Error("unauthorized");
       }
       return await api.post("/cart", {
         product_id: productId,
         quantity: qty,
+        size: size,
       });
     },
     onSuccess: () => {
@@ -61,7 +65,7 @@ export default function ProductDetails() {
 
   const handleAddToCart = () => {
     if (!product) return;
-    addToCartMutation.mutate({ productId: product.product_id, qty: quantity });
+    addToCartMutation.mutate({ productId: product.product_id, qty: quantity, size: selectedSize });
   };
 
   if (isLoading) {
@@ -135,6 +139,47 @@ export default function ProductDetails() {
             </p>
           </div>
 
+          {/* Size Selector */}
+          {!isOutOfStock && (
+            <div>
+              <h4 style={subHeadingStyle}>SELECT SIZE</h4>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' }}>
+                {STANDARD_SIZES.map(sz => {
+                  let isEnabled = true;
+                  if (product.sizes && Array.isArray(product.sizes) && product.sizes.length > 0) {
+                    const sizeObj = product.sizes.find(s => s.size === sz);
+                    isEnabled = sizeObj && sizeObj.stock > 0;
+                  }
+                  return (
+                    <button
+                      key={sz}
+                      onClick={() => isEnabled && setSelectedSize(sz)}
+                      disabled={!isEnabled}
+                      style={{
+                        width: '60px',
+                        padding: '12px 0',
+                        textAlign: 'center',
+                        border: selectedSize === sz ? '2px solid var(--accent-red)' : '1px solid var(--border-color)',
+                        backgroundColor: selectedSize === sz ? 'rgba(227, 6, 19, 0.1)' : 'var(--bg-input)',
+                        color: isEnabled ? 'var(--text-primary)' : 'var(--text-muted)',
+                        borderRadius: '4px',
+                        cursor: isEnabled ? 'pointer' : 'not-allowed',
+                        opacity: isEnabled ? 1 : 0.5,
+                        textDecoration: isEnabled ? 'none' : 'line-through',
+                        fontFamily: 'var(--font-display)',
+                        fontWeight: selectedSize === sz ? '800' : '500',
+                        fontSize: '12px',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      {sz}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Quantity selector & Add to cart */}
           {!isOutOfStock && (
             <div style={controlsRowStyle}>
@@ -160,7 +205,7 @@ export default function ProductDetails() {
                 onClick={handleAddToCart} 
                 className="btn btn-accent" 
                 style={addCartBtnStyle}
-                disabled={addToCartMutation.isPending}
+                disabled={addToCartMutation.isPending || !selectedSize}
               >
                 {addToCartMutation.isPending ? "ADDING..." : <>ADD TO CART <ShoppingCart size={18} /></>}
               </button>

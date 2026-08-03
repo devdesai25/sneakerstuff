@@ -100,7 +100,8 @@ async def order_create(
                 product_id=product.product_id,
                 quantity=cart_item.quantity,
                 unit_price=product.price,
-                subtotal=subtotal
+                subtotal=subtotal,
+                size=cart_item.size
             )
 
             db.add(order_item)

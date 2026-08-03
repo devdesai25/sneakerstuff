@@ -39,7 +39,8 @@ async def create_entry(
         entry = Entry(
             drop_id = drop_id,
             user_id = user.id,
-            address = address.address
+            address = address.address,
+            size = address.size
         )
         db.add(entry)
         await db.commit()

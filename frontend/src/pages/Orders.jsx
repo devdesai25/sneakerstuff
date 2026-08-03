@@ -16,6 +16,8 @@ import { OrderCardSkeleton } from "../components/common/Skeleton";
 import api from "../services/api";
 import { ClipboardList, ShoppingBag } from "lucide-react";
 
+// Note: Order items and their sizes are rendered inside OrderCard.jsx
+
 export default function Orders() {
   const queryClient = useQueryClient();
   const toast = useToast();

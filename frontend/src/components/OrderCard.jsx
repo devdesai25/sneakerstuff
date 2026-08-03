@@ -117,7 +117,10 @@ export default function OrderCard({ order, onPay, onCancel, isPaying, isCancelli
             <div key={idx} style={itemRowStyle}>
               <div style={itemDetailsStyle}>
                 <span style={itemNameStyle}>{item.product?.name || `Secured Release (Product #${item.product_id})`}</span>
-                <span style={itemQtyStyle}>Qty: {item.quantity}</span>
+                <span style={itemQtyStyle}>
+                  Qty: {item.quantity} 
+                  {item.size && <span style={sizeBadgeStyle}>| Size: {item.size}</span>}
+                </span>
               </div>
               <span style={itemPriceStyle}>${parseFloat(item.subtotal).toFixed(2)}</span>
             </div>
@@ -283,6 +286,14 @@ const itemQtyStyle = {
   fontSize: "11px",
   color: "var(--text-muted)",
   marginTop: "2px",
+  display: "flex",
+  alignItems: "center",
+  gap: "4px"
+};
+
+const sizeBadgeStyle = {
+  fontWeight: "700",
+  color: "var(--text-primary)",
 };
 
 const itemPriceStyle = {

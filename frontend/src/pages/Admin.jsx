@@ -11,7 +11,7 @@ import { useState, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { useToast } from "../components/common/Toast";
 import api from "../services/api";
-import { ShieldCheck, Plus, Trash2, Edit3, Calendar, Eye, EyeOff, Ban, Send, RefreshCw } from "lucide-react";
+import { ShieldCheck, Plus, Trash2, Edit3, Calendar, Eye, EyeOff, Ban, Send, RefreshCw, CheckCircle2, AlertCircle, Check } from "lucide-react";
 
 export default function Admin() {
   const queryClient = useQueryClient();
@@ -46,6 +46,7 @@ export default function Admin() {
     closes_at: "",
     drop_inventory: "",
   });
+  const [dropSizes, setDropSizes] = useState([]);
 
   // Queries
   const { data: products = [] } = useQuery({
@@ -233,15 +234,108 @@ export default function Admin() {
     }
   };
 
+  const handleDropProductSelect = (productIdStr) => {
+    const pId = parseInt(productIdStr, 10);
+    const selectedProd = products.find((p) => p.product_id === pId);
+
+    if (selectedProd) {
+      let initialDropSizes = [];
+      if (selectedProd.sizes && Array.isArray(selectedProd.sizes) && selectedProd.sizes.length > 0) {
+        initialDropSizes = STANDARD_SIZES.map((sName) => {
+          const found = selectedProd.sizes.find((ps) => ps.size === sName);
+          const maxStock = found ? found.stock : 0;
+          return { size: sName, stock: maxStock, maxStock };
+        });
+      } else {
+        initialDropSizes = STANDARD_SIZES.map((sName) => ({
+          size: sName,
+          stock: 0,
+          maxStock: 0,
+        }));
+      }
+
+      const totalCalculatedStock = initialDropSizes.reduce(
+        (acc, curr) => acc + (parseInt(curr.stock) || 0),
+        0
+      );
+
+      setDropSizes(initialDropSizes);
+      setDropForm((prev) => ({
+        ...prev,
+        product_id: productIdStr,
+        drop_inventory: totalCalculatedStock > 0 ? totalCalculatedStock.toString() : selectedProd.stock.toString(),
+      }));
+
+      toast.info(`Shoe sizes auto-filled for "${selectedProd.name}". Total available stock: ${selectedProd.stock} pairs.`);
+    } else {
+      setDropSizes([]);
+      setDropForm((prev) => ({
+        ...prev,
+        product_id: productIdStr,
+        drop_inventory: "",
+      }));
+    }
+  };
+
+  const handleDropSizeChange = (idx, newStockVal) => {
+    const val = parseInt(newStockVal, 10) || 0;
+    const updated = [...dropSizes];
+    const targetSize = updated[idx];
+
+    if (val > targetSize.maxStock) {
+      toast.error(
+        `Not sufficient stock for ${targetSize.size}! Maximum available stock is ${targetSize.maxStock}.`
+      );
+    } else if (val < 0) {
+      toast.error(`Quantity for ${targetSize.size} cannot be negative.`);
+    }
+
+    updated[idx] = { ...targetSize, stock: val };
+    setDropSizes(updated);
+
+    const newTotal = updated.reduce((acc, curr) => acc + (parseInt(curr.stock) || 0), 0);
+    setDropForm((prev) => ({
+      ...prev,
+      drop_inventory: newTotal.toString(),
+    }));
+  };
+
   const handleDropSubmit = (e) => {
     e.preventDefault();
-    // Convert to ISO-8601 strings expected by Pydantic datetime fields
+
+    if (!dropForm.product_id) {
+      toast.error("Please select a target product for the drop.");
+      return;
+    }
+
+    const selectedProd = products.find((p) => p.product_id === parseInt(dropForm.product_id, 10));
+
+    // Check size-level stock limits
+    const invalidSizes = dropSizes.filter((s) => s.stock > s.maxStock || s.stock < 0);
+    if (invalidSizes.length > 0) {
+      const names = invalidSizes.map((s) => `${s.size} (Available: ${s.maxStock}, Given: ${s.stock})`).join(", ");
+      toast.error(`Cannot schedule drop: Not sufficient stock for size(s): ${names}`);
+      return;
+    }
+
+    const requestedInventory = parseInt(dropForm.drop_inventory, 10) || 0;
+    if (selectedProd && requestedInventory > selectedProd.stock) {
+      toast.error(`Cannot schedule drop: Total drop allocation (${requestedInventory}) exceeds product stock (${selectedProd.stock}).`);
+      return;
+    }
+
+    if (requestedInventory <= 0) {
+      toast.error("Drop allocation size must be greater than zero.");
+      return;
+    }
+
     const payload = {
       product_id: parseInt(dropForm.product_id, 10),
       opens_at: new Date(dropForm.opens_at).toISOString(),
       closes_at: new Date(dropForm.closes_at).toISOString(),
-      drop_inventory: parseInt(dropForm.drop_inventory, 10),
+      drop_inventory: requestedInventory,
     };
+
     if (dropForm.id) {
       updateDropMutation.mutate({ id: dropForm.id, payload });
     } else {
@@ -252,11 +346,26 @@ export default function Admin() {
   const fillDropForm = (drop) => {
     setDropForm({
       id: drop.drop_id,
-      product_id: drop.product_id,
+      product_id: drop.product_id.toString(),
       opens_at: drop.opens_at ? drop.opens_at.slice(0, 16) : "",
       closes_at: drop.closes_at ? drop.closes_at.slice(0, 16) : "",
-      drop_inventory: drop.drop_inventory,
+      drop_inventory: drop.drop_inventory.toString(),
     });
+
+    const selectedProd = products.find((p) => p.product_id === drop.product_id);
+    if (selectedProd) {
+      if (selectedProd.sizes && Array.isArray(selectedProd.sizes) && selectedProd.sizes.length > 0) {
+        setDropSizes(
+          STANDARD_SIZES.map((sName) => {
+            const found = selectedProd.sizes.find((ps) => ps.size === sName);
+            const maxStock = found ? found.stock : 0;
+            return { size: sName, stock: maxStock, maxStock };
+          })
+        );
+      } else {
+        setDropSizes(STANDARD_SIZES.map((sName) => ({ size: sName, stock: 0, maxStock: 0 })));
+      }
+    }
   };
 
   const fillProductForm = (prod) => {
@@ -481,7 +590,7 @@ export default function Admin() {
                 <select
                   className="input-field"
                   value={dropForm.product_id}
-                  onChange={(e) => setDropForm({ ...dropForm, product_id: e.target.value })}
+                  onChange={(e) => handleDropProductSelect(e.target.value)}
                   style={{ backgroundColor: "var(--bg-input)" }}
                   required
                 >
@@ -494,8 +603,89 @@ export default function Admin() {
                 </select>
               </div>
 
+              {/* Shoe Size Inventory Allocation & Checks */}
+              {dropForm.product_id && dropSizes.length > 0 && (
+                <div
+                  className="form-group"
+                  style={{
+                    backgroundColor: "rgba(255, 255, 255, 0.02)",
+                    padding: "16px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border-color)",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <label className="form-label" style={{ margin: 0, fontSize: "12px", color: "var(--accent-neon-green)", letterSpacing: "0.5px" }}>
+                      SHOE SIZE ALLOCATION &amp; STOCK CHECKS
+                    </label>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600" }}>
+                      Allocated: {dropForm.drop_inventory || 0} pairs
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {dropSizes.map((sObj, idx) => {
+                      const allocated = parseInt(sObj.stock, 10) || 0;
+                      const isStockValid = allocated >= 0 && allocated <= sObj.maxStock;
+
+                      return (
+                        <div
+                          key={sObj.size}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "60px 100px 90px 1fr",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "6px 10px",
+                            backgroundColor: "var(--bg-input)",
+                            borderRadius: "6px",
+                            border: isStockValid ? "1px solid var(--border-color)" : "1px solid var(--error)",
+                          }}
+                        >
+                          <span style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-primary)" }}>
+                            {sObj.size}
+                          </span>
+
+                          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                            Max: <strong style={{ color: "var(--text-primary)" }}>{sObj.maxStock}</strong>
+                          </span>
+
+                          <input
+                            type="number"
+                            className="input-field"
+                            style={{
+                              padding: "2px 6px",
+                              height: "28px",
+                              fontSize: "12px",
+                              borderColor: !isStockValid ? "var(--error)" : undefined,
+                            }}
+                            min="0"
+                            max={sObj.maxStock}
+                            value={sObj.stock}
+                            onChange={(e) => handleDropSizeChange(idx, e.target.value)}
+                          />
+
+                          <div style={{ display: "flex", alignItems: "center", gap: "4px", justifyContent: "flex-end" }}>
+                            {isStockValid ? (
+                              <span style={{ color: "var(--accent-neon-green)", fontSize: "11px", fontWeight: "600", display: "flex", alignItems: "center", gap: "3px" }}>
+                                <CheckCircle2 size={13} /> Stock OK
+                              </span>
+                            ) : (
+                              <span style={{ color: "var(--error)", fontSize: "11px", fontWeight: "600", display: "flex", alignItems: "center", gap: "3px" }}>
+                                <AlertCircle size={13} /> Exceeds stock!
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="form-group">
-                <label className="form-label">Drop Allocation Size</label>
+                <label className="form-label">Total Drop Inventory</label>
                 <input
                   type="number"
                   className="input-field"

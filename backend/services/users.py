@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth.jwt import hash_password, encode, verify
+from backend.auth.jwt import hash_password_async, encode, verify_async
 from backend.models.users import User
 from backend.schemas.users import UserSignup
 
@@ -41,10 +41,11 @@ async def signup_service(
         )
 
     # 3. Create the user database record with email saved to db
+    hashed = await hash_password_async(user.password)
     new_user = User(
         username = user.username, 
         email = user.email,
-        hashed_password = hash_password(user.password)
+        hashed_password = hashed
     )
 
     try:
@@ -109,7 +110,8 @@ async def login_service(
             detail="Invalid Password or Email"
         )
             
-    if not verify(form_data.password, existing_user.hashed_password):
+    is_valid = await verify_async(form_data.password, existing_user.hashed_password)
+    if not is_valid:
         raise HTTPException(
             status_code=401,
             detail="Invalid Password or Email"

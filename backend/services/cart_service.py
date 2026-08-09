@@ -9,24 +9,14 @@ from backend.models.cart_items import CartItem
 from backend.models.users import User
 from backend.schemas.cart_items import CartPatch, CartCreate
 
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+
 async def cart_add(
     cur_cart: CartCreate,
     user: User, 
     db: AsyncSession
 ) -> CartItem:
-    """Add to cart with validation"""
-    product = (
-        await db.execute(
-            select(Product).where(Product.product_id == cur_cart.product_id)
-        )
-    ).scalar_one_or_none()
-
-    if not product:
-        raise HTTPException(
-            status_code= 404,
-            detail= "Product Not found"
-        )
-        
+    """Add to cart with atomic PostgreSQL Upsert"""
     product_size = (
         await db.execute(
             select(ProductSize).where(
@@ -42,64 +32,37 @@ async def cart_add(
             detail="Product size not found"
         )
         
-    """Check Available quantity before creating cart"""
     if product_size.stock < cur_cart.quantity:
         raise HTTPException(
-            status_code= 409,
+            status_code=409,
             detail="Product is out of stock"
         )
-    
-    cart = (
-        await db.execute(
-            select(CartItem).where(
-                CartItem.user_id == user.id, 
-                CartItem.product_id == cur_cart.product_id,
-                CartItem.size == cur_cart.size
-            )
+
+    stmt = (
+        pg_insert(CartItem)
+        .values(
+            user_id=user.id,
+            product_id=cur_cart.product_id,
+            quantity=cur_cart.quantity,
+            size=cur_cart.size
         )
-    ).scalar_one_or_none()
-    
-    if cart is None:
-        try:
-            add_to_cart = CartItem(
-                user_id = user.id,
-                product_id = cur_cart.product_id,
-                quantity = cur_cart.quantity,
-                size = cur_cart.size
-            )
+        .on_conflict_do_update(
+            constraint="unique_user_product_size",
+            set_={"quantity": CartItem.quantity + cur_cart.quantity}
+        )
+        .returning(CartItem)
+    )
 
-            db.add(add_to_cart)
-            await db.commit()
-            await db.refresh(add_to_cart)
-
-            return add_to_cart
-
-        except IntegrityError:
-            await db.rollback()
-            raise HTTPException(
-                status_code=409,
-                detail="Database Integrity Error"
-            )
-        
-    if product_size.stock < (cur_cart.quantity + cart.quantity):
-       raise HTTPException(
-           status_code=409,
-           detail = "Stock unavailable"
-       ) 
-   
     try:
-        cart.quantity += cur_cart.quantity
+        result = await db.execute(stmt)
         await db.commit()
-        await db.refresh(cart)
-    
-    except IntegrityError:
+        return result.scalar_one()
+    except Exception:
         await db.rollback()
         raise HTTPException(
             status_code=409,
             detail="Database integrity error"
         )
-
-    return cart
 
 async def cart_patch(
     product_id: int, 

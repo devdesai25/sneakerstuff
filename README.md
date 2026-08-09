@@ -93,12 +93,83 @@ The limited-edition sneaker and streetwear industry (Air Jordans, Yeezys, Travis
 
 ---
 
+## 🔄 Product & Drop Lifecycles
+
+### 👟 Product Lifecycle
+
+```
+ ┌───────────────────────┐
+ │ Product Created       │ ──> Added to catalog with global stock & per-size availability matrix
+ └───────────┬───────────┘
+             │
+             ├───> [Direct Shop Checkout]: User adds to cart ➔ Order `PENDING` ➔ Order `PAID` ➔ Deducts size stock
+             │
+             └───> [Drop Allocation]: Staged into Drop ➔ Publishing deducts `drop_inventory` from `Product.stock`
+                                         │
+                                         ├───> [Drop Cancelled/Deleted]: Stock restored to `Product.stock`
+                                         └───> [Drop Completed]: Unallocated leftover pairs restored to `Product.stock`
+```
+
+1. **Catalog Staging & Size Matrix**:
+   - Products are created with a total available `stock` and size breakdown (`ProductSize`).
+2. **Direct Shop Checkout**:
+   - Standard non-drop items are purchased via Cart checkout. Payment (`order_pay`) deducts quantity from `ProductSize.stock`.
+3. **Allocation to Raffle Drops**:
+   - Admin allocates `drop_inventory` from `Product.stock`. When the drop is published (`DRAFT` ➔ `SCHEDULED`), `Product.stock` is decremented by `drop_inventory` to lock inventory exclusively for raffle winners.
+4. **Stock Restoration**:
+   - Deleting or cancelling a drop (in any state) immediately restores all reserved unallocated pairs **plus** pending unpaid winner checkouts back to `Product.stock`.
+   - Completing a drop automatically returns any leftover unallocated pairs back to `Product.stock`.
+
+---
+
+### ⚡ Drop Lifecycle & State Machine
+
+```
+┌─────────┐   publish    ┌───────────┐  opens_at   ┌────────────┐  closes_at  ┌──────────────┐
+│  DRAFT  │ ───────────> │ SCHEDULED │ ──────────> │ ENTRY_OPEN │ ──────────> │ ENTRY_CLOSED │
+└─────────┘              └───────────┘             └────────────┘             └──────┬───────┘
+     │                         │                         │                           │
+     │ delete                  │ delete/cancel           │ delete/cancel             │ draw winners
+     ▼                         ▼                         ▼                           ▼
+┌─────────┐               ┌───────────┐             ┌────────────┐            ┌──────────────┐
+│ DELETED │               │ CANCELLED │             │ CANCELLED  │            │  SELECTING   │
+└─────────┘               └───────────┘             └────────────┘            └──────┬───────┘
+                                                                                     │
+                                                                                     ▼
+┌───────────┐         all settled / waitlist exhausted                        ┌──────────────┐
+│ COMPLETED │ <────────────────────────────────────────────────────────────── │   CLAIMING   │
+└───────────┘                                                                 └──────────────┘
+```
+
+1. **`DRAFT`**:
+   - Admin configures launch dates (`opens_at`, `closes_at`), product price, and size breakdown. `Product.stock` remains untouched.
+2. **`SCHEDULED`**:
+   - Admin publishes drop. `drop_inventory` is deducted from `Product.stock`. Celery schedules background tasks for opening and closing.
+3. **`ENTRY_OPEN`**:
+   - Current time reaches `opens_at`. Authenticated users submit 1 entry per drop selecting size and shipping address.
+4. **`ENTRY_CLOSED`**:
+   - Current time reaches `closes_at`. Entry registration closes.
+5. **`SELECTING`**:
+   - Admin or Celery triggers drawing algorithm. Entries are randomly shuffled and assigned queue ranks (`1..N`). Winners selected up to available `drop_inventory`.
+6. **`CLAIMING`**:
+   - Winners receive 24-hour pending checkout orders (`OrderStatus.PENDING`). Waitlist entrants receive queue rankings.
+   - **Winner Pays Order**: Order status ➔ `PAID`, size stock updated, drop auto-completes when all winners finish.
+   - **Winner Forfeits/Cancels**: Reservation slot offered to next waitlist entrant (`Rank #2`, `Rank #3`). If waitlist is exhausted, remaining stock returns to `Product.stock` and drop auto-completes.
+7. **`COMPLETED`**:
+   - Final state. All winners settled or waitlist exhausted. Unallocated stock returned to `Product.stock`. Card badge displays `COMPLETED`.
+8. **`PAUSED`**:
+   - Admin temporarily pauses drop. Entries blocked until resumed.
+9. **`CANCELLED`**:
+   - Admin cancels drop in any state. 100% of reserved stock (unallocated inventory + pending checkouts) restored to `Product.stock`.
+
+---
+
 ## ✨ Core Features
 
 - 👟 **Drop Management & Publishing**: Admin control panel for staging drops in `DRAFT`, scheduling launch windows, locking dedicated inventory, and transitioning status (`SCHEDULED` ➔ `ENTRY_OPEN` ➔ `ENTRY_CLOSED` ➔ `COMPLETED`).
 - 🎟️ **Bot-Free Raffle Entry System**: Enforces 1 entry per authenticated user per drop with shipping address verification.
 - 🎲 **Automated Winner Draw Algorithm**: Celery background task randomly selects winners up to the specified `drop_inventory` count, automatically creating reserved allocations.
-- 💳 **Order Settlement & Checkout**: Sandbox-ready order payment settlement (`PATCH /api/orders/{id}/pay`) with automatic 10-minute stock reservation timeout.
+- 💳 **Order Settlement & Checkout**: Sandbox-ready order payment settlement (`PATCH /api/orders/{id}/pay`) with automatic stock reservation timeouts.
 - 📊 **Order Lifecycle Management**: Cart-to-order conversion, stock deduction locking, payment timestamp tracking (`paid_at`), and order cancellation workflows.
 
 ---

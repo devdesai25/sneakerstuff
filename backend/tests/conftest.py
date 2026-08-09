@@ -5,6 +5,7 @@ from httpx import AsyncClient
 from httpx import ASGITransport
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from backend.main import app
 from backend.database import Base
@@ -20,19 +21,21 @@ from backend.tests.test_database import (
     TestingSessionLocal,
 )
 
-from sqlalchemy import text
-
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def prepare_database():
     
     async with engine.begin() as conn:
-        await conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+        await conn.execute(text("SET session_replication_role = 'replica';"))
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("SET session_replication_role = 'origin';"))
         await conn.run_sync(Base.metadata.create_all)
     
     yield
 
     async with engine.begin() as conn:
-        await conn.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+        await conn.execute(text("SET session_replication_role = 'replica';"))
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.execute(text("SET session_replication_role = 'origin';"))
 
 
 @pytest_asyncio.fixture

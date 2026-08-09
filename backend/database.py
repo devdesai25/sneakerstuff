@@ -7,8 +7,8 @@ from backend.config import settings
 metadata = MetaData()
 engine = create_async_engine(
     settings.DATABASE_URL,
-    pool_size=20,
-    max_overflow=0,
+    pool_size=10,
+    max_overflow=5,
     connect_args={
         "prepared_statement_cache_size": 0,
         "statement_cache_size": 0,

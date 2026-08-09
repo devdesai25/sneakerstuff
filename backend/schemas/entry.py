@@ -1,11 +1,24 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
 
 class EntryRequest(BaseModel):
     address: str
+    size: str = "US 9"
+
+class ReservationResponse(BaseModel):
+    reservation_id: int
+    order_id: int
+    order_status: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 class EntryResponse(BaseModel):
     entry_id: int
     drop_id: int
     user_id: int
-    ranking: int
+    ranking: Optional[int] = None
     address: str
+    size: str
+    reservation: Optional[ReservationResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)

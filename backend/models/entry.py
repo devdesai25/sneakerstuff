@@ -35,6 +35,12 @@ class Entry(Base):
         String,
         nullable=False
     )
+
+    size = Column(
+        String,
+        nullable=False,
+        default="US 9"
+    )
     user = relationship(
         "User",
         back_populates="entries"
@@ -48,7 +54,8 @@ class Entry(Base):
     reservation = relationship(
         "Reservation",
         back_populates="entry",
-        uselist=False
+        uselist=False,
+        cascade="all, delete-orphan"
     )
 
     __table_args__ = (

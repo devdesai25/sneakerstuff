@@ -2,10 +2,12 @@ from fastapi import Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
 from backend.models.products import Product
 from backend.models.users import User
 from backend.models.drops import Drop
+from backend.models.product_sizes import ProductSize
 from backend.schemas.product import ProductCreate, ProductUpdate, ProductResponse
 from backend.helpers.product_helpers import get_product_or_404
 
@@ -28,11 +30,15 @@ async def product_add(
             detail="Duplicate Value Inserted"
         )
 
+    stock = new_product.stock
+    if hasattr(new_product, 'sizes') and new_product.sizes:
+        stock = sum(size.stock for size in new_product.sizes)
+
     add_prod = Product(
         name = new_product.name, 
         description = new_product.description, 
         price = new_product.price, 
-        stock = new_product.stock, 
+        stock = stock, 
         created_by = admin.id,
         images = new_product.images
     ) 
@@ -41,6 +47,21 @@ async def product_add(
         db.add(add_prod)
         await db.commit()
         await db.refresh(add_prod)
+
+        if hasattr(new_product, 'sizes') and new_product.sizes:
+            for size_data in new_product.sizes:
+                new_size = ProductSize(
+                    product_id=add_prod.product_id,
+                    size=size_data.size,
+                    stock=size_data.stock
+                )
+                db.add(new_size)
+            await db.commit()
+
+        # load sizes for response
+        stmt = select(Product).options(selectinload(Product.sizes)).where(Product.product_id == add_prod.product_id)
+        result = await db.execute(stmt)
+        add_prod = result.scalar_one()
 
     except IntegrityError:
         await db.rollback()
@@ -103,12 +124,34 @@ async def product_update(
     """Convert Pydantic model to dict, only with fields client sent"""
     update_data = update_product.model_dump(exclude_unset=True)
 
+    sizes_data = update_data.pop('sizes', None)
+
     for key, value in update_data.items():
             setattr(product, key, value)
+            
+    if sizes_data is not None:
+        from sqlalchemy import delete
+        await db.execute(delete(ProductSize).where(ProductSize.product_id == product_id))
+        
+        new_stock = 0
+        for size_data in sizes_data:
+            size = size_data['size'] if isinstance(size_data, dict) else size_data.size
+            stock = size_data['stock'] if isinstance(size_data, dict) else size_data.stock
+            new_stock += stock
+            db.add(ProductSize(
+                product_id=product_id,
+                size=size,
+                stock=stock
+            ))
+            
+        product.stock = new_stock
     
     try:
         await db.commit()
-        await db.refresh(product)
+        
+        stmt = select(Product).options(selectinload(Product.sizes)).where(Product.product_id == product_id)
+        result = await db.execute(stmt)
+        product = result.scalar_one()
     
     except IntegrityError:
         await db.rollback()

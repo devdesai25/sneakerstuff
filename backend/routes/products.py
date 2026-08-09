@@ -1,5 +1,7 @@
-from fastapi import APIRouter, Depends
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -25,22 +27,67 @@ router = APIRouter(
 def home():
     return {"message":"backend connected"}
 
+from backend.services.redis_service import get_cache, set_cache
+
 @router.get("/products", response_model= list[ProductResponse])
 async def get_products(
     limit: int = 10, 
     offset: int = 0,
-    db: AsyncSession = Depends(get_db )
+    q: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
 ):
-    
-    all_prod = (
-        await db.execute(
-            select(Product)
-            .offset(offset)
-            .limit(limit)
-        )
-    ).scalars().all()
+    cache_key = f"products:list:{limit}:{offset}:{q or ''}"
+    cached = await get_cache(cache_key)
+    if cached:
+        return cached
 
+    stmt = select(Product).options(selectinload(Product.sizes))
+    if q:
+        stmt = stmt.where(Product.name.ilike(f"%{q}%"))
+    stmt = stmt.offset(offset).limit(limit)
+    
+    all_prod = (await db.execute(stmt)).scalars().all()
+    serialized = [
+        {
+            "product_id": p.product_id,
+            "name": p.name,
+            "description": p.description,
+            "price": float(p.price),
+            "stock": p.stock,
+            "images": p.images,
+            "sizes": [{"id": s.id, "size": s.size, "stock": s.stock} for s in p.sizes]
+        }
+        for p in all_prod
+    ]
+    await set_cache(cache_key, serialized, ttl=60)
     return all_prod
+
+@router.get("/products/{product_id}", response_model=ProductResponse)
+async def get_product_by_id(
+    product_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    cache_key = f"product:detail:{product_id}"
+    cached = await get_cache(cache_key)
+    if cached:
+        return cached
+
+    stmt = select(Product).options(selectinload(Product.sizes)).where(Product.product_id == product_id)
+    product = (await db.execute(stmt)).scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    serialized = {
+        "product_id": product.product_id,
+        "name": product.name,
+        "description": product.description,
+        "price": float(product.price),
+        "stock": product.stock,
+        "images": product.images,
+        "sizes": [{"id": s.id, "size": s.size, "stock": s.stock} for s in product.sizes]
+    }
+    await set_cache(cache_key, serialized, ttl=60)
+    return product
 
 @router.post("/admin/create", response_model = ProductResponse)
 async def create_product(

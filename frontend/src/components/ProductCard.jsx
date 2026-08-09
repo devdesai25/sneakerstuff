@@ -22,9 +22,10 @@ export default function ProductCard({ product, onAddToCart }) {
 
   // Format currency
   const formatPrice = (price) => {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat("en-IN", {
       style: "currency",
-      currency: "USD"
+      currency: "INR",
+      maximumFractionDigits: 2
     }).format(price);
   };
 
@@ -77,14 +78,13 @@ export default function ProductCard({ product, onAddToCart }) {
           <Eye size={13} /> DETAILS
         </Link>
         {onAddToCart && (
-          <button
-            onClick={() => onAddToCart(product.product_id)}
-            disabled={product.stock <= 0}
+          <Link
+            to={`/product/${product.product_id}`}
             className="btn btn-primary"
-            style={{ flex: 1.2, padding: "10px", fontSize: "11px", gap: "4px" }}
+            style={{ flex: 1.2, padding: "10px", fontSize: "11px", gap: "4px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
           >
-            <ShoppingBag size={13} /> {product.stock <= 0 ? "SOLD OUT" : "ADD TO BAG"}
-          </button>
+            <ShoppingBag size={13} /> SELECT SIZE
+          </Link>
         )}
       </div>
     </div>

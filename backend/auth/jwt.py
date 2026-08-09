@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from fastapi.security import OAuth2PasswordBearer
 from backend.config import settings
 
+import anyio
 pwd_context = CryptContext(schemes=["bcrypt_sha256","bcrypt"], deprecated="auto")
 
 def hash_password(password:str):
@@ -15,6 +16,12 @@ def hash_password(password:str):
 def verify(plain_password:str,hash_password:str):
     plain_password = pwd_context.verify(plain_password, hash_password)
     return plain_password
+
+async def hash_password_async(password: str) -> str:
+    return await anyio.to_thread.run_sync(pwd_context.hash, password)
+
+async def verify_async(plain_password: str, hashed_password: str) -> bool:
+    return await anyio.to_thread.run_sync(pwd_context.verify, plain_password, hashed_password)
 
 def encode(data:dict):
     assert isinstance(data,dict)    

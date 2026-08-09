@@ -1,11 +1,13 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
+from typing import Optional
 
 class OrderItemsSummary(BaseModel):
     product_id: int
     quantity: int
     unit_price: float
     subtotal: float
+    size: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

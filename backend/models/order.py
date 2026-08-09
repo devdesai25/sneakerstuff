@@ -46,7 +46,8 @@ class Order(Base):
     reservation = relationship(
         "Reservation",
         back_populates="order",
-        uselist=False
+        uselist=False,
+        cascade="all, delete-orphan"
     )
 
     user = relationship(

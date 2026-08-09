@@ -104,7 +104,7 @@ export default function OrderCard({ order, onPay, onCancel, isPaying, isCancelli
           <DollarSign size={15} style={iconStyle} />
           <div>
             <span style={labelStyle}>Total Amount</span>
-            <span style={amountValueStyle}>${parseFloat(order.total_amount).toFixed(2)}</span>
+            <span style={amountValueStyle}>₹{parseFloat(order.total_amount).toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -117,9 +117,12 @@ export default function OrderCard({ order, onPay, onCancel, isPaying, isCancelli
             <div key={idx} style={itemRowStyle}>
               <div style={itemDetailsStyle}>
                 <span style={itemNameStyle}>{item.product?.name || `Secured Release (Product #${item.product_id})`}</span>
-                <span style={itemQtyStyle}>Qty: {item.quantity}</span>
+                <span style={itemQtyStyle}>
+                  Qty: {item.quantity} 
+                  {item.size && <span style={sizeBadgeStyle}>| Size: {item.size}</span>}
+                </span>
               </div>
-              <span style={itemPriceStyle}>${parseFloat(item.subtotal).toFixed(2)}</span>
+              <span style={itemPriceStyle}>₹{parseFloat(item.subtotal).toFixed(2)}</span>
             </div>
           ))}
         </div>
@@ -283,6 +286,14 @@ const itemQtyStyle = {
   fontSize: "11px",
   color: "var(--text-muted)",
   marginTop: "2px",
+  display: "flex",
+  alignItems: "center",
+  gap: "4px"
+};
+
+const sizeBadgeStyle = {
+  fontWeight: "700",
+  color: "var(--text-primary)",
 };
 
 const itemPriceStyle = {

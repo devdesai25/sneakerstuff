@@ -172,7 +172,10 @@ export default function Cart() {
                   <Link to={`/product/${item.product_id}`} style={itemTitleLinkStyle}>
                     <h3 style={itemTitleStyle}>{item.name}</h3>
                   </Link>
-                  <span style={itemPriceStyle}>${Number(item.price).toFixed(2)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={itemPriceStyle}>₹{Number(item.price).toFixed(2)}</span>
+                    {item.size && <span style={sizeBadgeStyle}>{item.size}</span>}
+                  </div>
 
                   <div style={qtyControlsWrapperStyle}>
                     <div style={qtyControlsStyle}>
@@ -206,7 +209,7 @@ export default function Cart() {
 
                 <div style={subtotalColStyle}>
                   <span style={subtotalLabelStyle}>SUBTOTAL</span>
-                  <span style={subtotalValStyle}>${Number(item.price * item.quantity).toFixed(2)}</span>
+                  <span style={subtotalValStyle}>₹{Number(item.price * item.quantity).toFixed(2)}</span>
                 </div>
               </div>
             );
@@ -219,7 +222,7 @@ export default function Cart() {
 
           <div style={summaryRowStyle}>
             <span>Cart Subtotal</span>
-            <span>${cartTotal.toFixed(2)}</span>
+            <span>₹{cartTotal.toFixed(2)}</span>
           </div>
 
           <div style={summaryRowStyle}>
@@ -229,7 +232,7 @@ export default function Cart() {
 
           <div style={totalRowStyle}>
             <span>TOTAL</span>
-            <span>${cartTotal.toFixed(2)}</span>
+            <span>₹{cartTotal.toFixed(2)}</span>
           </div>
 
           {/* Checkout address form */}
@@ -321,6 +324,17 @@ const itemPriceStyle = {
   color: "var(--text-muted)",
   fontSize: "14px",
   fontWeight: "600",
+};
+
+const sizeBadgeStyle = {
+  display: 'inline-block',
+  padding: '2px 6px',
+  backgroundColor: 'var(--bg-input)',
+  border: '1px solid var(--border-color)',
+  borderRadius: '12px',
+  fontSize: '11px',
+  fontWeight: '700',
+  color: 'var(--text-muted)',
 };
 
 const qtyControlsWrapperStyle = {

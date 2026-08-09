@@ -11,7 +11,7 @@ import { useState, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { useToast } from "../components/common/Toast";
 import api from "../services/api";
-import { ShieldCheck, Plus, Trash2, Edit3, Calendar, Eye, EyeOff, Ban, Send, RefreshCw } from "lucide-react";
+import { ShieldCheck, Plus, Trash2, Edit3, Calendar, Eye, EyeOff, Ban, Send, RefreshCw, CheckCircle2, AlertCircle, Check, Pause, Play } from "lucide-react";
 
 export default function Admin() {
   const queryClient = useQueryClient();
@@ -20,6 +20,14 @@ export default function Admin() {
 
   // Active sub-sections tabs: "products" or "drops"
   const [activeTab, setActiveTab] = useState("products");
+  
+  const STANDARD_SIZES = ["US 7", "US 7.5", "US 8", "US 8.5", "US 9", "US 9.5", "US 10", "US 10.5", "US 11", "US 11.5", "US 12"];
+
+  const [sizes, setSizes] = useState(
+    STANDARD_SIZES.map(s => ({ size: s, stock: 0 }))
+  );
+  
+  const totalStock = sizes.reduce((acc, curr) => acc + (parseInt(curr.stock) || 0), 0);
 
   // Form States - Product Create/Update
   const [productForm, setProductForm] = useState({
@@ -38,6 +46,7 @@ export default function Admin() {
     closes_at: "",
     drop_inventory: "",
   });
+  const [dropSizes, setDropSizes] = useState([]);
 
   // Queries
   const { data: products = [] } = useQuery({
@@ -152,7 +161,7 @@ export default function Admin() {
 
   const publishDropMutation = useMutation({
     mutationFn: async (id) => {
-      return await api.post(`/admin/drop/${id}/publish`);
+      return await api.patch(`/admin/drop/${id}/publish`);
     },
     onSuccess: () => {
       toast.success("Drop published to scheduled queues!");
@@ -165,7 +174,7 @@ export default function Admin() {
 
   const cancelDropMutation = useMutation({
     mutationFn: async (id) => {
-      return await api.post(`/admin/drop/${id}/cancel`);
+      return await api.patch(`/admin/drop/${id}/cancel`);
     },
     onSuccess: () => {
       toast.success("Drop drawing canceled.");
@@ -178,7 +187,7 @@ export default function Admin() {
 
   const toggleVisibilityMutation = useMutation({
     mutationFn: async (id) => {
-      return await api.post(`/admin/drop/${id}/toggle-visibility`);
+      return await api.patch(`/admin/drop/${id}/toggle-visibility`);
     },
     onSuccess: () => {
       toast.success("Visibility updated.");
@@ -186,6 +195,45 @@ export default function Admin() {
     },
     onError: (err) => {
       toast.error(err.response?.data?.detail || "Failed to update visibility.");
+    },
+  });
+
+  const pauseDropMutation = useMutation({
+    mutationFn: async (id) => {
+      return await api.patch(`/admin/drop/${id}/pause`);
+    },
+    onSuccess: () => {
+      toast.success("Drop paused.");
+      queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to pause drop.");
+    },
+  });
+
+  const resumeDropMutation = useMutation({
+    mutationFn: async (id) => {
+      return await api.patch(`/admin/drop/${id}/resume`);
+    },
+    onSuccess: () => {
+      toast.success("Drop resumed.");
+      queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to resume drop.");
+    },
+  });
+
+  const drawDropMutation = useMutation({
+    mutationFn: async (id) => {
+      return await api.post(`/admin/drop/${id}/draw`);
+    },
+    onSuccess: () => {
+      toast.success("Raffle draw executed! Winners selected.");
+      queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to execute raffle draw.");
     },
   });
 
@@ -204,6 +252,7 @@ export default function Admin() {
 
   const resetProductForm = () => {
     setProductForm({ id: "", name: "", price: "", description: "", stock: "", images: "" });
+    setSizes(STANDARD_SIZES.map(s => ({ size: s, stock: 0 })));
   };
 
   const handleProductSubmit = (e) => {
@@ -212,7 +261,8 @@ export default function Admin() {
       name: productForm.name,
       price: parseFloat(productForm.price),
       description: productForm.description,
-      stock: parseInt(productForm.stock, 10),
+      stock: totalStock,
+      sizes: sizes,
       images: productForm.images || "",
     };
 
@@ -223,15 +273,125 @@ export default function Admin() {
     }
   };
 
+  const handleDropProductSelect = (productIdStr) => {
+    const pId = parseInt(productIdStr, 10);
+    const selectedProd = products.find((p) => p.product_id === pId);
+
+    if (selectedProd) {
+      let initialDropSizes = [];
+      if (selectedProd.sizes && Array.isArray(selectedProd.sizes) && selectedProd.sizes.length > 0) {
+        initialDropSizes = STANDARD_SIZES.map((sName) => {
+          const found = selectedProd.sizes.find((ps) => ps.size === sName);
+          const maxStock = found ? found.stock : 0;
+          return { size: sName, stock: maxStock, maxStock };
+        });
+      } else {
+        initialDropSizes = STANDARD_SIZES.map((sName) => ({
+          size: sName,
+          stock: 0,
+          maxStock: 0,
+        }));
+      }
+
+      let totalCalculatedStock = initialDropSizes.reduce(
+        (acc, curr) => acc + (parseInt(curr.stock) || 0),
+        0
+      );
+
+      // If sum of size stock exceeds available product stock (due to reserved drops/orders), cap size quantities proportionally or down to total product stock
+      if (totalCalculatedStock > selectedProd.stock && selectedProd.stock >= 0) {
+        let diff = totalCalculatedStock - selectedProd.stock;
+        // Trim difference starting from largest size stocks
+        for (let i = initialDropSizes.length - 1; i >= 0 && diff > 0; i--) {
+          if (initialDropSizes[i].stock > 0) {
+            const reduceBy = Math.min(initialDropSizes[i].stock, diff);
+            initialDropSizes[i].stock -= reduceBy;
+            diff -= reduceBy;
+          }
+        }
+        totalCalculatedStock = selectedProd.stock;
+        toast.info(
+          `Shoe sizes auto-filled for "${selectedProd.name}". Unreserved stock available: ${selectedProd.stock} pairs (${totalCalculatedStock} pairs allocated).`
+        );
+      } else {
+        toast.info(`Shoe sizes auto-filled for "${selectedProd.name}". Total available stock: ${selectedProd.stock} pairs.`);
+      }
+
+      setDropSizes(initialDropSizes);
+      setDropForm((prev) => ({
+        ...prev,
+        product_id: productIdStr,
+        drop_inventory: totalCalculatedStock.toString(),
+      }));
+    } else {
+      setDropSizes([]);
+      setDropForm((prev) => ({
+        ...prev,
+        product_id: productIdStr,
+        drop_inventory: "",
+      }));
+    }
+  };
+
+  const handleDropSizeChange = (idx, newStockVal) => {
+    const val = parseInt(newStockVal, 10) || 0;
+    const updated = [...dropSizes];
+    const targetSize = updated[idx];
+
+    if (val > targetSize.maxStock) {
+      toast.error(
+        `Not sufficient stock for ${targetSize.size}! Maximum available stock is ${targetSize.maxStock}.`
+      );
+    } else if (val < 0) {
+      toast.error(`Quantity for ${targetSize.size} cannot be negative.`);
+    }
+
+    updated[idx] = { ...targetSize, stock: val };
+    setDropSizes(updated);
+
+    const newTotal = updated.reduce((acc, curr) => acc + (parseInt(curr.stock) || 0), 0);
+    setDropForm((prev) => ({
+      ...prev,
+      drop_inventory: newTotal.toString(),
+    }));
+  };
+
   const handleDropSubmit = (e) => {
     e.preventDefault();
-    // Convert to ISO-8601 strings expected by Pydantic datetime fields
+
+    if (!dropForm.product_id) {
+      toast.error("Please select a target product for the drop.");
+      return;
+    }
+
+    const selectedProd = products.find((p) => p.product_id === parseInt(dropForm.product_id, 10));
+
+    // Check size-level stock limits
+    const invalidSizes = dropSizes.filter((s) => s.stock > s.maxStock || s.stock < 0);
+    if (invalidSizes.length > 0) {
+      const names = invalidSizes.map((s) => `${s.size} (Available: ${s.maxStock}, Given: ${s.stock})`).join(", ");
+      toast.error(`Cannot schedule drop: Not sufficient stock for size(s): ${names}`);
+      return;
+    }
+
+    const requestedInventory = parseInt(dropForm.drop_inventory, 10) || 0;
+    if (selectedProd && requestedInventory > selectedProd.stock) {
+      toast.error(`Cannot schedule drop: Total drop allocation (${requestedInventory}) exceeds product stock (${selectedProd.stock}).`);
+      return;
+    }
+
+    if (requestedInventory <= 0) {
+      toast.error("Drop allocation size must be greater than zero.");
+      return;
+    }
+
     const payload = {
       product_id: parseInt(dropForm.product_id, 10),
       opens_at: new Date(dropForm.opens_at).toISOString(),
       closes_at: new Date(dropForm.closes_at).toISOString(),
-      drop_inventory: parseInt(dropForm.drop_inventory, 10),
+      drop_inventory: requestedInventory,
     };
+
     if (dropForm.id) {
       updateDropMutation.mutate({ id: dropForm.id, payload });
     } else {
@@ -242,11 +402,26 @@ export default function Admin() {
   const fillDropForm = (drop) => {
     setDropForm({
       id: drop.drop_id,
-      product_id: drop.product_id,
+      product_id: drop.product_id.toString(),
       opens_at: drop.opens_at ? drop.opens_at.slice(0, 16) : "",
       closes_at: drop.closes_at ? drop.closes_at.slice(0, 16) : "",
-      drop_inventory: drop.drop_inventory,
+      drop_inventory: drop.drop_inventory.toString(),
     });
+
+    const selectedProd = products.find((p) => p.product_id === drop.product_id);
+    if (selectedProd) {
+      if (selectedProd.sizes && Array.isArray(selectedProd.sizes) && selectedProd.sizes.length > 0) {
+        setDropSizes(
+          STANDARD_SIZES.map((sName) => {
+            const found = selectedProd.sizes.find((ps) => ps.size === sName);
+            const maxStock = found ? found.stock : 0;
+            return { size: sName, stock: maxStock, maxStock };
+          })
+        );
+      } else {
+        setDropSizes(STANDARD_SIZES.map((sName) => ({ size: sName, stock: 0, maxStock: 0 })));
+      }
+    }
   };
 
   const fillProductForm = (prod) => {
@@ -258,6 +433,15 @@ export default function Admin() {
       stock: prod.stock.toString(),
       images: prod.images || "",
     });
+
+    if (prod.sizes && Array.isArray(prod.sizes) && prod.sizes.length > 0) {
+      setSizes(STANDARD_SIZES.map(s => {
+        const found = prod.sizes.find(ps => ps.size === s);
+        return { size: s, stock: found ? found.stock : 0 };
+      }));
+    } else {
+      setSizes(STANDARD_SIZES.map(s => ({ size: s, stock: 0 })));
+    }
   };
 
   return (
@@ -321,15 +505,37 @@ export default function Admin() {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Stock Qty</label>
+                  <label className="form-label">Total Stock</label>
                   <input
                     type="number"
                     className="input-field"
-                    value={productForm.stock}
-                    onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
-                    placeholder="25"
-                    required
+                    value={totalStock}
+                    disabled
+                    style={{ backgroundColor: "var(--bg-secondary)", cursor: "not-allowed" }}
                   />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Size Inventory (Pairs)</label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "16px" }}>
+                  {sizes.map((sObj, idx) => (
+                    <div key={sObj.size} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <span style={{ fontSize: "12px", width: "50px", color: "var(--text-muted)", fontWeight: "600" }}>{sObj.size}</span>
+                      <input
+                        type="number"
+                        className="input-field"
+                        style={{ padding: "6px", height: "30px", fontSize: "12px" }}
+                        min="0"
+                        value={sObj.stock}
+                        onChange={(e) => {
+                          const newSizes = [...sizes];
+                          newSizes[idx].stock = parseInt(e.target.value) || 0;
+                          setSizes(newSizes);
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -393,7 +599,7 @@ export default function Admin() {
                     <div>
                       <h4 style={{ fontSize: "14px" }}>{prod.name}</h4>
                       <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                        ID #{prod.product_id} &bull; stock: {prod.stock} &bull; ${Number(prod.price).toFixed(2)}
+                        ID #{prod.product_id} &bull; stock: {prod.stock} &bull; ₹{Number(prod.price).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -440,7 +646,7 @@ export default function Admin() {
                 <select
                   className="input-field"
                   value={dropForm.product_id}
-                  onChange={(e) => setDropForm({ ...dropForm, product_id: e.target.value })}
+                  onChange={(e) => handleDropProductSelect(e.target.value)}
                   style={{ backgroundColor: "var(--bg-input)" }}
                   required
                 >
@@ -453,14 +659,96 @@ export default function Admin() {
                 </select>
               </div>
 
+              {/* Shoe Size Inventory Allocation & Checks */}
+              {dropForm.product_id && dropSizes.length > 0 && (
+                <div
+                  className="form-group"
+                  style={{
+                    backgroundColor: "rgba(255, 255, 255, 0.02)",
+                    padding: "16px",
+                    borderRadius: "8px",
+                    border: "1px solid var(--border-color)",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                    <label className="form-label" style={{ margin: 0, fontSize: "12px", color: "var(--accent-neon-green)", letterSpacing: "0.5px" }}>
+                      SHOE SIZE ALLOCATION &amp; STOCK CHECKS
+                    </label>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: "600" }}>
+                      Allocated: {dropForm.drop_inventory || 0} pairs
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {dropSizes.map((sObj, idx) => {
+                      const allocated = parseInt(sObj.stock, 10) || 0;
+                      const isStockValid = allocated >= 0 && allocated <= sObj.maxStock;
+
+                      return (
+                        <div
+                          key={sObj.size}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "60px 100px 90px 1fr",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "6px 10px",
+                            backgroundColor: "var(--bg-input)",
+                            borderRadius: "6px",
+                            border: isStockValid ? "1px solid var(--border-color)" : "1px solid var(--error)",
+                          }}
+                        >
+                          <span style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-primary)" }}>
+                            {sObj.size}
+                          </span>
+
+                          <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                            Max: <strong style={{ color: "var(--text-primary)" }}>{sObj.maxStock}</strong>
+                          </span>
+
+                          <input
+                            type="number"
+                            className="input-field"
+                            style={{
+                              padding: "2px 6px",
+                              height: "28px",
+                              fontSize: "12px",
+                              borderColor: !isStockValid ? "var(--error)" : undefined,
+                            }}
+                            min="0"
+                            max={sObj.maxStock}
+                            value={sObj.stock}
+                            onChange={(e) => handleDropSizeChange(idx, e.target.value)}
+                          />
+
+                          <div style={{ display: "flex", alignItems: "center", gap: "4px", justifyContent: "flex-end" }}>
+                            {isStockValid ? (
+                              <span style={{ color: "var(--accent-neon-green)", fontSize: "11px", fontWeight: "600", display: "flex", alignItems: "center", gap: "3px" }}>
+                                <CheckCircle2 size={13} /> Stock OK
+                              </span>
+                            ) : (
+                              <span style={{ color: "var(--error)", fontSize: "11px", fontWeight: "600", display: "flex", alignItems: "center", gap: "3px" }}>
+                                <AlertCircle size={13} /> Exceeds stock!
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="form-group">
-                <label className="form-label">Drop Allocation Size</label>
+                <label className="form-label">Total Drop Inventory (Auto-calculated from sizes)</label>
                 <input
                   type="number"
                   className="input-field"
                   value={dropForm.drop_inventory}
-                  onChange={(e) => setDropForm({ ...dropForm, drop_inventory: e.target.value })}
-                  placeholder="Pairs allocated to raffle"
+                  disabled
+                  style={{ backgroundColor: "var(--bg-secondary)", cursor: "not-allowed" }}
+                  placeholder="Sum of shoe-sizes pairs"
                   required
                 />
               </div>
@@ -551,26 +839,70 @@ export default function Admin() {
                         >
                           <Edit3 size={11} /> Edit
                         </button>
+                      </>
+                    )}
+                    {(drop.status === "SCHEDULED" || drop.status === "ENTRY_OPEN" || drop.status === "ENTRY_CLOSED" || drop.status === "SELECTING" || drop.status === "CLAIMING") && (
+                      <>
                         <button
-                          onClick={() => deleteDropMutation.mutate(drop.drop_id)}
+                          onClick={() => drawDropMutation.mutate(drop.drop_id)}
+                          className="btn btn-primary"
+                          style={actionBtnTinyStyle}
+                          title="Trigger Draw & Select Winners"
+                        >
+                          <Send size={11} /> Draw Winners
+                        </button>
+                        <button
+                          onClick={() => pauseDropMutation.mutate(drop.drop_id)}
+                          className="btn btn-outline"
+                          style={{ ...actionBtnTinyStyle, color: "var(--accent-neon-orange, #ff9900)" }}
+                          title="Pause Drop"
+                        >
+                          <Pause size={11} /> Pause
+                        </button>
+                        <button
+                          onClick={() => cancelDropMutation.mutate(drop.drop_id)}
                           className="btn btn-danger"
                           style={actionBtnTinyStyle}
-                          title="Delete Draft"
+                          title="Cancel Drop"
                         >
-                          <Trash2 size={11} /> Delete
+                          <Ban size={11} /> Cancel
                         </button>
                       </>
                     )}
-                    {drop.status === "SCHEDULED" && (
-                      <button
-                        onClick={() => cancelDropMutation.mutate(drop.drop_id)}
-                        className="btn btn-danger"
-                        style={actionBtnTinyStyle}
-                        title="Cancel Drop"
-                      >
-                        <Ban size={11} /> Cancel
-                      </button>
+                    {drop.status === "PAUSED" && (
+                      <>
+                        <button
+                          onClick={() => resumeDropMutation.mutate(drop.drop_id)}
+                          className="btn btn-primary"
+                          style={actionBtnTinyStyle}
+                          title="Resume Drop"
+                        >
+                          <Play size={11} /> Resume
+                        </button>
+                        <button
+                          onClick={() => cancelDropMutation.mutate(drop.drop_id)}
+                          className="btn btn-danger"
+                          style={actionBtnTinyStyle}
+                          title="Cancel Drop"
+                        >
+                          <Ban size={11} /> Cancel
+                        </button>
+                      </>
                     )}
+                    
+                    {/* Delete button available for ALL drop states */}
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Delete Drop #${drop.drop_id}? Reserved stock will be restored back to product inventory.`)) {
+                          deleteDropMutation.mutate(drop.drop_id);
+                        }
+                      }}
+                      className="btn btn-danger"
+                      style={actionBtnTinyStyle}
+                      title="Delete Drop & Restore Stock"
+                    >
+                      <Trash2 size={11} /> Delete
+                    </button>
                   </div>
                 </div>
               ))}

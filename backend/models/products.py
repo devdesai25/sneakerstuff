@@ -27,3 +27,4 @@ class Product(Base):
     cart_items = relationship("CartItem", back_populates="product")
     order_items = relationship("OrderItem", back_populates="product", cascade="all, delete-orphan")
     drops = relationship("Drop", back_populates="product")
+    sizes = relationship("ProductSize", back_populates="product", cascade="all, delete-orphan")

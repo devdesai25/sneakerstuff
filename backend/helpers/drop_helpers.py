@@ -7,13 +7,13 @@ from backend.models.entry import Entry
 
 async def drop_get(db: AsyncSession) -> list[Drop]:
 
-    drop = (
+    drops = (
         await db.execute(
             select(Drop)
         )
     ).scalars().all()
     
-    return drop
+    return drops
 
 async def get_drop_or_404(drop_id: int, db: AsyncSession) -> Drop:
     

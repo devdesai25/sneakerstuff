@@ -20,6 +20,11 @@ class OrderItem(Base):
     
     quantity = Column(Integer, default=1)
 
+    size = Column(
+        String,
+        nullable=True
+    )
+
     unit_price = Column(
         Numeric(10, 2),
         nullable=False

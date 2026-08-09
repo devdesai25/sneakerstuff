@@ -43,15 +43,14 @@ async def _close_drop(self, drop_id):
         try:    
             drop = await get_drop_or_404(drop_id, db)
             drop.status = DropStatus.ENTRY_CLOSED
-            await db.flush()
 
-            entries = await get_entries_or_404(drop_id, db)
+            stmt = select(Entry).where(Entry.drop_id == drop_id)
+            entries = (await db.execute(stmt)).scalars().all()
 
             if not entries:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Entries not found"
-                )
+                await _check_and_complete_drop(drop, db)
+                await db.commit()
+                return
             
             random.shuffle(entries)
 
@@ -76,7 +75,6 @@ def close_drop(self, drop_id:int):
 async def _select_winners(self, drop_id):
     async with CelerySessionLocal() as db: 
 
-
         try:
             drop = (
                 await db.execute(
@@ -86,13 +84,16 @@ async def _select_winners(self, drop_id):
                 )
             ).scalar_one_or_none()
 
-            entries = await get_entries_or_404(drop_id, db)
+            if not drop:
+                return
+
+            stmt = select(Entry).where(Entry.drop_id == drop_id)
+            entries = (await db.execute(stmt)).scalars().all()
 
             if not entries:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Entries not found"
-                )
+                await _check_and_complete_drop(drop, db)
+                await db.commit()
+                return
             
             stmt = (
                 select(Entry)

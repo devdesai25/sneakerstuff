@@ -22,9 +22,23 @@ async def get_public_drops(
     db: AsyncSession = Depends(get_db)
 ):
     """Retrieve all published drops (excluding DRAFT and hidden statuses) for public users."""
+    from datetime import datetime, timezone
+
     stmt = select(Drop).where(Drop.status != DropStatus.DRAFT, Drop.is_visible == True)
     result = await db.execute(stmt)
-    return result.scalars().all()
+    drops = result.scalars().all()
+
+    now = datetime.now(timezone.utc)
+    updated = False
+    for drop in drops:
+        if drop.status in (DropStatus.SCHEDULED, DropStatus.ENTRY_OPEN) and now >= drop.closes_at:
+            drop.status = DropStatus.ENTRY_CLOSED
+            updated = True
+
+    if updated:
+        await db.commit()
+
+    return drops
 
 @router.get("/admin/drop", response_model = list[DropResponse])
 async def get_drop(

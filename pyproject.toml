@@ -1,0 +1,28 @@
+[project]
+name = "sneakerstuff"
+version = "1.0.0"
+description = "Ecommerce Backend FastAPI"
+dependencies = [
+    "fastapi",
+    "mangum",
+    "sqlalchemy",
+    "psycopg2-binary",
+    "python-jose",
+    "passlib",
+    "python-multipart",
+    "pydantic-settings",
+    "python-dotenv",
+    "celery",
+    "redis",
+    "asyncpg>=0.29.0",
+    "httpx",
+    "bcrypt==4.0.1",
+    "pytest",
+    "pytest-asyncio",
+    "asgi-lifespan",
+    "gunicorn",
+    "uvicorn"
+]
+
+[tool.vercel]
+entrypoint = "backend.api.index:app"

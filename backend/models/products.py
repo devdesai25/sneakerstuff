@@ -1,9 +1,8 @@
-from sqlalchemy import Column, String, Float, Integer, Boolean, ForeignKey, DateTime
+from backend.database import Base
+from sqlalchemy import Column, String, Numeric, Integer, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .users import User
-from database import Base
-
 class Product(Base):
     __tablename__ = "products"
 
@@ -13,7 +12,10 @@ class Product(Base):
     description = Column(String, nullable=False)
 
     stock = Column(Integer, default=0, nullable=False)
-    price = Column(Float, nullable=False)
+    price = Column(
+        Numeric(10, 2),
+        nullable=False
+    )
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -24,3 +26,5 @@ class Product(Base):
 
     cart_items = relationship("CartItem", back_populates="product")
     order_items = relationship("OrderItem", back_populates="product", cascade="all, delete-orphan")
+    drops = relationship("Drop", back_populates="product")
+    sizes = relationship("ProductSize", back_populates="product", cascade="all, delete-orphan")

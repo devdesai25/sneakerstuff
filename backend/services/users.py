@@ -1,97 +1,132 @@
-from database import get_db
-from models.users import User
 from fastapi import HTTPException
-from auth.jwt import hash_password, encode, verify, encode
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-def signup_service(user, db):
-           
-    db_user = (
-        db.query(User)
-        .filter(User.username == user.username)
-        .first()
-        )
+from backend.auth.jwt import hash_password_async, encode, verify_async
+from backend.models.users import User
+from backend.schemas.users import UserSignup
+
+async def signup_service(
+    user: UserSignup, 
+    db: AsyncSession
+) -> dict:
+    """Register a new user, validating unique username and email addresses."""
     
-    if db_user:
-
+    # 1. Uniqueness check on username
+    existing_username = (
+        await db.execute(
+            select(User).where(User.username == user.username)
+        )
+    ).scalar_one_or_none()
+    
+    if existing_username:
         raise HTTPException(
             status_code=409,
-            detail="Username already there"
+            detail="Username already taken"
         )
-    
-    hashed_pass = hash_password(user.password)
 
-    db_user = User(
+    # 2. Uniqueness check on email address
+    existing_email = (
+        await db.execute(
+            select(User).where(User.email == user.email)
+        )
+    ).scalar_one_or_none()
+    
+    if existing_email:
+        raise HTTPException(
+            status_code=409,
+            detail="Email already registered"
+        )
+
+    # 3. Create the user database record with email saved to db
+    hashed = await hash_password_async(user.password)
+    new_user = User(
         username = user.username, 
-        hashed_password = hashed_pass
+        email = user.email,
+        hashed_password = hashed
     )
 
     try:
-        db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+    
+    except Exception:
+        await db.rollback()
+        raise
     
     except IntegrityError:
-        db.rollback()
-
+        await db.rollback()
         raise HTTPException(
             status_code=409,
             detail="Database Integrity Error"
         )
     
-    except Exception:
-        db.rollback()
 
-        raise HTTPException(
-            status_code=500,
-            detail="Internal Server Error"
-        )
-    
-    token = {"sub":db_user.id,"username":db_user.username}
 
-    access_token = encode(token)
+    # 4. Generate token payload containing user id, username, email, and actual database role
+    access_token = encode(
+         {
+         "sub": str(new_user.id),
+         "username": new_user.username,
+         "email": new_user.email,
+         "role": new_user.role
+        }
+    )
 
     return (
         {
             "access_token": access_token,
             "token_type": "bearer",
             "user":{
-                "id" : db_user.id,
-                "username": db_user.username,
-                "role": db_user.role 
+                "id" : new_user.id,
+                "username": new_user.username,
+                "email": new_user.email,
+                "role": new_user.role 
             }
         }
     )
 
 
-def login_service(user, db):
+async def login_service(
+    form_data: OAuth2PasswordRequestForm, 
+    db: AsyncSession
+) -> dict:
+    """Authenticate users by looking up the email column (mapped from OAuth2 username)."""
     
-    db_user = (
-        db.query(User)
-        .filter(User.username == user.username)
-        .first()
+    # Perform database lookup against the User.email column
+    # OAuth2PasswordRequestForm passes the email address in the 'username' field.
+    existing_user = (
+        await db.execute(
+            select(User).where(User.email == form_data.username)
         )
-    
-    if not db_user:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid Password or Username"
-                )
+    ).scalar_one_or_none()
+        
+    if not existing_user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Password or Email"
+        )
             
-    if not verify(user.password, db_user.hashed_password):
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid Password Or Username"
-                )
-        
-    user_id = db_user.id 
-        
+    is_valid = await verify_async(form_data.password, existing_user.hashed_password)
+    if not is_valid:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Password or Email"
+        )
+     
+    # Embed sub (id), username, email, and role in JWT claims
     access_token = encode({
-                "sub":str(user_id),
-                "username":db_user.username
-            })
+        "sub": str(existing_user.id),
+        "username": existing_user.username,
+        "email": existing_user.email,
+        "role": existing_user.role
+        }
+    )
 
     return {
-            "access_token":access_token,
-            "token_type":"bearer"
-        }
+        "access_token": access_token,
+        "token_type": "bearer"
+    }

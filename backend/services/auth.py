@@ -1,39 +1,43 @@
-from auth.jwt import decode, oauth2scheme
 from fastapi import Depends, HTTPException
-from database import get_db
-from models.users import User
-from schemas.users import UserLogin
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-def get_current_user(
-        token = Depends(oauth2scheme), 
-        db = Depends(get_db)
-):
+from backend.database import get_db
+from backend.models.users import User
+from backend.auth.jwt import decode, oauth2scheme
+
+async def get_current_user(
+        token: str = Depends(oauth2scheme), 
+        db: AsyncSession = Depends(get_db)
+) -> User:
     
-    payload =  decode(token)
+    payload = decode(token)
     
     if not payload:
         raise HTTPException(401,detail="Token Invalid")
     
-    user_id = payload.get('sub')
+    "JWT stroes as string so convert it to integer"
+    user_id = int(payload.get('sub'))
     
-    user =  (
-        db.query(User)
-        .filter(User.id == user_id)
-        .first()
-    )
-    
+    user = (
+        await db.execute(
+            select(User).where(User.id == user_id)
+        )
+    ).scalar_one_or_none()  
+
     if not user:
         raise HTTPException(
             401,
             detail="User Not Found"
         )
+    
     return user
 
 def req_admin(
-        admin = Depends(get_current_user)
-):
+    admin: User = Depends(get_current_user)
+) -> User:
 
-    if not admin.role == 'admin':
+    if admin.role != 'admin':
         
         raise HTTPException(
             status_code=403,

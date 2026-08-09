@@ -11,7 +11,8 @@ from backend.schemas.drops import DropResponse, DropCreate, DropUpdate
 from backend.services.drop_service import (
     drop_get, drop_create, 
     drop_delete, drop_update, 
-    drop_cancel, drop_publish
+    drop_cancel, drop_publish,
+    drop_pause, drop_resume, drop_draw, execute_drop_draw
 )
 
 router = APIRouter()
@@ -90,3 +91,27 @@ async def toggle_drop_visibility(
     await db.commit()
     await db.refresh(drop)
     return drop
+
+@router.patch("/admin/drop/{id}/pause", response_model=DropResponse)
+async def pause_drop(
+    id: int,
+    admin: User = Depends(req_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    return await drop_pause(id, db)
+
+@router.patch("/admin/drop/{id}/resume", response_model=DropResponse)
+async def resume_drop(
+    id: int,
+    admin: User = Depends(req_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    return await drop_resume(id, db)
+
+@router.post("/admin/drop/{id}/draw", response_model=DropResponse)
+async def trigger_drop_draw(
+    id: int,
+    admin: User = Depends(req_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    return await drop_draw(id, db)

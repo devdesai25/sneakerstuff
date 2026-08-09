@@ -37,7 +37,10 @@ async def get_order_one_or_404(
         await db.execute(
             select(Order)
             .where(Order.order_id == order_id, Order.user_id == user.id)
-            .options(selectinload(Order.order_items))
+            .options(
+                selectinload(Order.order_items),
+                selectinload(Order.reservation)
+            )
         )
     ).scalar_one_or_none()
 

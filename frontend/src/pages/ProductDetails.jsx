@@ -128,7 +128,7 @@ export default function ProductDetails() {
               <span className="badge badge-neon">EXCLUSIVELY IN STOCK</span>
             )}
             <h1 style={titleStyle}>{product.name}</h1>
-            <span style={priceStyle}>${Number(product.price).toFixed(2)}</span>
+            <span style={priceStyle}>₹{Number(product.price).toFixed(2)}</span>
           </div>
 
           {/* Description */}

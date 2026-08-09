@@ -173,7 +173,7 @@ export default function Cart() {
                     <h3 style={itemTitleStyle}>{item.name}</h3>
                   </Link>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={itemPriceStyle}>${Number(item.price).toFixed(2)}</span>
+                    <span style={itemPriceStyle}>₹{Number(item.price).toFixed(2)}</span>
                     {item.size && <span style={sizeBadgeStyle}>{item.size}</span>}
                   </div>
 
@@ -209,7 +209,7 @@ export default function Cart() {
 
                 <div style={subtotalColStyle}>
                   <span style={subtotalLabelStyle}>SUBTOTAL</span>
-                  <span style={subtotalValStyle}>${Number(item.price * item.quantity).toFixed(2)}</span>
+                  <span style={subtotalValStyle}>₹{Number(item.price * item.quantity).toFixed(2)}</span>
                 </div>
               </div>
             );
@@ -222,7 +222,7 @@ export default function Cart() {
 
           <div style={summaryRowStyle}>
             <span>Cart Subtotal</span>
-            <span>${cartTotal.toFixed(2)}</span>
+            <span>₹{cartTotal.toFixed(2)}</span>
           </div>
 
           <div style={summaryRowStyle}>
@@ -232,7 +232,7 @@ export default function Cart() {
 
           <div style={totalRowStyle}>
             <span>TOTAL</span>
-            <span>${cartTotal.toFixed(2)}</span>
+            <span>₹{cartTotal.toFixed(2)}</span>
           </div>
 
           {/* Checkout address form */}

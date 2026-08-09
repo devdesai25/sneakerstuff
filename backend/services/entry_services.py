@@ -17,11 +17,31 @@ async def create_entry(
 ) -> dict:  
     drop = await get_drop_or_404(drop_id, db)
 
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    # Auto-activate drop status to ENTRY_OPEN if time has passed opens_at and drop is SCHEDULED
+    if drop.status == DropStatus.SCHEDULED and drop.opens_at <= now < drop.closes_at:
+        drop.status = DropStatus.ENTRY_OPEN
+        await db.commit()
+        await db.refresh(drop)
+
     if drop.status != DropStatus.ENTRY_OPEN:
-        raise HTTPException(
-            status_code=400,
-            detail="Entries are not open for this drop"
-        )
+        if now < drop.opens_at:
+            raise HTTPException(
+                status_code=400,
+                detail="Drop drawing has not opened yet."
+            )
+        elif now >= drop.closes_at:
+            raise HTTPException(
+                status_code=400,
+                detail="Drop drawing is already closed."
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Entries are not open for this drop."
+            )
     
     try:
         entry = (
@@ -152,23 +172,41 @@ async def count_entry(
     return count
 
 
+from sqlalchemy.orm import selectinload
+
 async def user_entries(
     user: User,
     db: AsyncSession
-) -> Entry:
-    try: 
-        entries = (
-            await db.execute(
-                select(Entry)
-                .where(Entry.user_id == user.id)
-            )
-        ).scalars().all()
+) -> list[Entry]:
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    from backend.services.drop_service import execute_drop_draw
 
-        if not entries:
-            raise HTTPException(
-                detail="No entries found"
-            )
-    except Exception:
-        raise
-    
+    from backend.models.reservations import Reservation
+    stmt = (
+        select(Entry)
+        .where(Entry.user_id == user.id)
+        .options(
+            selectinload(Entry.reservation).selectinload(Reservation.order),
+            selectinload(Entry.drop)
+        )
+    )
+    entries = (await db.execute(stmt)).scalars().all()
+
+    # If any drop entered by the user has passed closes_at but hasn't drawn winners yet, execute draw!
+    needs_refresh = False
+    for entry in entries:
+        if entry.drop:
+            if now >= entry.drop.closes_at and entry.drop.status in (DropStatus.SCHEDULED, DropStatus.ENTRY_OPEN, DropStatus.ENTRY_CLOSED, DropStatus.SELECTING):
+                await execute_drop_draw(entry.drop, db)
+                needs_refresh = True
+
+    if needs_refresh:
+        # Re-fetch entries to reflect newly generated reservations and rankings
+        entries = (await db.execute(stmt)).scalars().all()
+
+    for entry in entries:
+        if entry.reservation and entry.reservation.order:
+            entry.reservation.order_status = entry.reservation.order.status
+
     return entries

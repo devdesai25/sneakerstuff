@@ -16,12 +16,18 @@ CANCELLABLE_STATES = frozenset({
     DropStatus.SCHEDULED,
     DropStatus.ENTRY_OPEN,
     DropStatus.ENTRY_CLOSED,
+    DropStatus.SELECTING,
+    DropStatus.CLAIMING,
+    DropStatus.PAUSED,
 })
 
 STOCK_RESERVED_STATES = frozenset({
     DropStatus.SCHEDULED,
     DropStatus.ENTRY_OPEN,
     DropStatus.ENTRY_CLOSED,
+    DropStatus.SELECTING,
+    DropStatus.CLAIMING,
+    DropStatus.PAUSED,
 })
 
 UPDATABLE_STATES = frozenset({
@@ -32,6 +38,4 @@ PUBLISHABLE_STATES = frozenset({
     DropStatus.DRAFT,
 })
 
-DELETABLE_STATES = frozenset({
-    DropStatus.DRAFT,
-})
+DELETABLE_STATES = frozenset(DropStatus)

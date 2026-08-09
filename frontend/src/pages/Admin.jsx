@@ -11,7 +11,7 @@ import { useState, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { useToast } from "../components/common/Toast";
 import api from "../services/api";
-import { ShieldCheck, Plus, Trash2, Edit3, Calendar, Eye, EyeOff, Ban, Send, RefreshCw, CheckCircle2, AlertCircle, Check } from "lucide-react";
+import { ShieldCheck, Plus, Trash2, Edit3, Calendar, Eye, EyeOff, Ban, Send, RefreshCw, CheckCircle2, AlertCircle, Check, Pause, Play } from "lucide-react";
 
 export default function Admin() {
   const queryClient = useQueryClient();
@@ -161,7 +161,7 @@ export default function Admin() {
 
   const publishDropMutation = useMutation({
     mutationFn: async (id) => {
-      return await api.post(`/admin/drop/${id}/publish`);
+      return await api.patch(`/admin/drop/${id}/publish`);
     },
     onSuccess: () => {
       toast.success("Drop published to scheduled queues!");
@@ -174,7 +174,7 @@ export default function Admin() {
 
   const cancelDropMutation = useMutation({
     mutationFn: async (id) => {
-      return await api.post(`/admin/drop/${id}/cancel`);
+      return await api.patch(`/admin/drop/${id}/cancel`);
     },
     onSuccess: () => {
       toast.success("Drop drawing canceled.");
@@ -187,7 +187,7 @@ export default function Admin() {
 
   const toggleVisibilityMutation = useMutation({
     mutationFn: async (id) => {
-      return await api.post(`/admin/drop/${id}/toggle-visibility`);
+      return await api.patch(`/admin/drop/${id}/toggle-visibility`);
     },
     onSuccess: () => {
       toast.success("Visibility updated.");
@@ -195,6 +195,45 @@ export default function Admin() {
     },
     onError: (err) => {
       toast.error(err.response?.data?.detail || "Failed to update visibility.");
+    },
+  });
+
+  const pauseDropMutation = useMutation({
+    mutationFn: async (id) => {
+      return await api.patch(`/admin/drop/${id}/pause`);
+    },
+    onSuccess: () => {
+      toast.success("Drop paused.");
+      queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to pause drop.");
+    },
+  });
+
+  const resumeDropMutation = useMutation({
+    mutationFn: async (id) => {
+      return await api.patch(`/admin/drop/${id}/resume`);
+    },
+    onSuccess: () => {
+      toast.success("Drop resumed.");
+      queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to resume drop.");
+    },
+  });
+
+  const drawDropMutation = useMutation({
+    mutationFn: async (id) => {
+      return await api.post(`/admin/drop/${id}/draw`);
+    },
+    onSuccess: () => {
+      toast.success("Raffle draw executed! Winners selected.");
+      queryClient.invalidateQueries({ queryKey: ["adminDrops"] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to execute raffle draw.");
     },
   });
 
@@ -254,19 +293,36 @@ export default function Admin() {
         }));
       }
 
-      const totalCalculatedStock = initialDropSizes.reduce(
+      let totalCalculatedStock = initialDropSizes.reduce(
         (acc, curr) => acc + (parseInt(curr.stock) || 0),
         0
       );
+
+      // If sum of size stock exceeds available product stock (due to reserved drops/orders), cap size quantities proportionally or down to total product stock
+      if (totalCalculatedStock > selectedProd.stock && selectedProd.stock >= 0) {
+        let diff = totalCalculatedStock - selectedProd.stock;
+        // Trim difference starting from largest size stocks
+        for (let i = initialDropSizes.length - 1; i >= 0 && diff > 0; i--) {
+          if (initialDropSizes[i].stock > 0) {
+            const reduceBy = Math.min(initialDropSizes[i].stock, diff);
+            initialDropSizes[i].stock -= reduceBy;
+            diff -= reduceBy;
+          }
+        }
+        totalCalculatedStock = selectedProd.stock;
+        toast.info(
+          `Shoe sizes auto-filled for "${selectedProd.name}". Unreserved stock available: ${selectedProd.stock} pairs (${totalCalculatedStock} pairs allocated).`
+        );
+      } else {
+        toast.info(`Shoe sizes auto-filled for "${selectedProd.name}". Total available stock: ${selectedProd.stock} pairs.`);
+      }
 
       setDropSizes(initialDropSizes);
       setDropForm((prev) => ({
         ...prev,
         product_id: productIdStr,
-        drop_inventory: totalCalculatedStock > 0 ? totalCalculatedStock.toString() : selectedProd.stock.toString(),
+        drop_inventory: totalCalculatedStock.toString(),
       }));
-
-      toast.info(`Shoe sizes auto-filled for "${selectedProd.name}". Total available stock: ${selectedProd.stock} pairs.`);
     } else {
       setDropSizes([]);
       setDropForm((prev) => ({
@@ -543,7 +599,7 @@ export default function Admin() {
                     <div>
                       <h4 style={{ fontSize: "14px" }}>{prod.name}</h4>
                       <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                        ID #{prod.product_id} &bull; stock: {prod.stock} &bull; ${Number(prod.price).toFixed(2)}
+                        ID #{prod.product_id} &bull; stock: {prod.stock} &bull; ₹{Number(prod.price).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -685,13 +741,14 @@ export default function Admin() {
               )}
 
               <div className="form-group">
-                <label className="form-label">Total Drop Inventory</label>
+                <label className="form-label">Total Drop Inventory (Auto-calculated from sizes)</label>
                 <input
                   type="number"
                   className="input-field"
                   value={dropForm.drop_inventory}
-                  onChange={(e) => setDropForm({ ...dropForm, drop_inventory: e.target.value })}
-                  placeholder="Pairs allocated to raffle"
+                  disabled
+                  style={{ backgroundColor: "var(--bg-secondary)", cursor: "not-allowed" }}
+                  placeholder="Sum of shoe-sizes pairs"
                   required
                 />
               </div>
@@ -782,26 +839,70 @@ export default function Admin() {
                         >
                           <Edit3 size={11} /> Edit
                         </button>
+                      </>
+                    )}
+                    {(drop.status === "SCHEDULED" || drop.status === "ENTRY_OPEN" || drop.status === "ENTRY_CLOSED" || drop.status === "SELECTING" || drop.status === "CLAIMING") && (
+                      <>
                         <button
-                          onClick={() => deleteDropMutation.mutate(drop.drop_id)}
+                          onClick={() => drawDropMutation.mutate(drop.drop_id)}
+                          className="btn btn-primary"
+                          style={actionBtnTinyStyle}
+                          title="Trigger Draw & Select Winners"
+                        >
+                          <Send size={11} /> Draw Winners
+                        </button>
+                        <button
+                          onClick={() => pauseDropMutation.mutate(drop.drop_id)}
+                          className="btn btn-outline"
+                          style={{ ...actionBtnTinyStyle, color: "var(--accent-neon-orange, #ff9900)" }}
+                          title="Pause Drop"
+                        >
+                          <Pause size={11} /> Pause
+                        </button>
+                        <button
+                          onClick={() => cancelDropMutation.mutate(drop.drop_id)}
                           className="btn btn-danger"
                           style={actionBtnTinyStyle}
-                          title="Delete Draft"
+                          title="Cancel Drop"
                         >
-                          <Trash2 size={11} /> Delete
+                          <Ban size={11} /> Cancel
                         </button>
                       </>
                     )}
-                    {drop.status === "SCHEDULED" && (
-                      <button
-                        onClick={() => cancelDropMutation.mutate(drop.drop_id)}
-                        className="btn btn-danger"
-                        style={actionBtnTinyStyle}
-                        title="Cancel Drop"
-                      >
-                        <Ban size={11} /> Cancel
-                      </button>
+                    {drop.status === "PAUSED" && (
+                      <>
+                        <button
+                          onClick={() => resumeDropMutation.mutate(drop.drop_id)}
+                          className="btn btn-primary"
+                          style={actionBtnTinyStyle}
+                          title="Resume Drop"
+                        >
+                          <Play size={11} /> Resume
+                        </button>
+                        <button
+                          onClick={() => cancelDropMutation.mutate(drop.drop_id)}
+                          className="btn btn-danger"
+                          style={actionBtnTinyStyle}
+                          title="Cancel Drop"
+                        >
+                          <Ban size={11} /> Cancel
+                        </button>
+                      </>
                     )}
+                    
+                    {/* Delete button available for ALL drop states */}
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Delete Drop #${drop.drop_id}? Reserved stock will be restored back to product inventory.`)) {
+                          deleteDropMutation.mutate(drop.drop_id);
+                        }
+                      }}
+                      className="btn btn-danger"
+                      style={actionBtnTinyStyle}
+                      title="Delete Drop & Restore Stock"
+                    >
+                      <Trash2 size={11} /> Delete
+                    </button>
                   </div>
                 </div>
               ))}

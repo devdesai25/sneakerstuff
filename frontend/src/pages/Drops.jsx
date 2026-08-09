@@ -203,7 +203,8 @@ export default function Drops() {
       ) : (
         <div className="grid-cols-3">
           {filteredDrops.map((drop) => {
-            const hasEntered = checkHasEntered(drop.drop_id);
+            const userEntry = userEntries.find((entry) => entry.drop_id === drop.drop_id);
+            const hasEntered = !!userEntry;
             const isLive = new Date().getTime() >= new Date(drop.opens_at).getTime() && new Date().getTime() < new Date(drop.closes_at).getTime();
             const isClosed = new Date().getTime() >= new Date(drop.closes_at).getTime();
 
@@ -221,8 +222,14 @@ export default function Drops() {
                     }}
                   />
                   <div style={badgeContainerStyle}>
-                    {isClosed ? (
-                      <span className="badge badge-danger">CLOSED</span>
+                    {drop.status === "COMPLETED" || (isClosed && drop.status !== "CLAIMING" && drop.status !== "PAUSED" && drop.status !== "CANCELLED") ? (
+                      <span className="badge badge-outline" style={{ color: "var(--accent-neon-green)", borderColor: "var(--accent-neon-green)" }}>COMPLETED</span>
+                    ) : drop.status === "PAUSED" ? (
+                      <span className="badge badge-warning">PAUSED</span>
+                    ) : drop.status === "CANCELLED" ? (
+                      <span className="badge badge-danger">CANCELLED</span>
+                    ) : drop.status === "CLAIMING" ? (
+                      <span className="badge badge-success">WINNERS CLAIMING</span>
                     ) : isLive ? (
                       <span className="badge badge-success">LIVE DRAW</span>
                     ) : (
@@ -236,7 +243,7 @@ export default function Drops() {
                   <h3 style={productTitleStyle}>{drop.product_name || "Nike Release"}</h3>
                   <div style={priceRowStyle}>
                     <span style={retailLabelStyle}>Retail Price</span>
-                    <span style={retailPriceStyle}>${parseFloat(drop.product_price).toFixed(2)}</span>
+                    <span style={retailPriceStyle}>₹{parseFloat(drop.product_price).toFixed(2)}</span>
                   </div>
 
                   {/* Countdown Timer */}
@@ -253,20 +260,64 @@ export default function Drops() {
                     </div>
                   </div>
 
-                  {/* Auth-sensitive Action Button */}
+                  {/* Auth-sensitive Action Button & Drawing Status */}
                   {hasEntered ? (
-                    <div style={enteredBannerStyle}>
-                      <Award size={14} /> REGISTERED FOR DRAW
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "auto" }}>
+                      {userEntry?.reservation?.order_status === "PAID" ? (
+                        <div style={{ ...enteredBannerStyle, backgroundColor: "rgba(15, 139, 90, 0.15)", color: "var(--accent-neon-green)", borderColor: "var(--accent-neon-green)", padding: "12px" }}>
+                          <Award size={16} /> ✓ ORDER PAID &amp; SECURED (#{userEntry.reservation.order_id})
+                        </div>
+                      ) : userEntry?.reservation?.order_status === "CANCELLED" || userEntry?.reservation?.order_status === "EXPIRED" ? (
+                        <div style={{ ...enteredBannerStyle, backgroundColor: "rgba(220, 53, 69, 0.1)", color: "var(--error)", borderColor: "var(--error)", padding: "12px" }}>
+                          <Award size={16} /> ✕ RAFFLE ORDER CANCELLED / FORFEITED
+                        </div>
+                      ) : userEntry?.reservation ? (
+                        <>
+                          <div style={{ ...enteredBannerStyle, backgroundColor: "rgba(15, 139, 90, 0.15)", color: "var(--accent-neon-green)", borderColor: "var(--accent-neon-green)" }}>
+                            <Award size={16} /> 🎉 YOU WON THIS RAFFLE! (Rank #{userEntry.ranking})
+                          </div>
+                          <button
+                            onClick={() => navigate("/orders")}
+                            className="btn btn-accent"
+                            style={{ width: "100%", padding: "10px", fontSize: "12px", fontWeight: "800" }}
+                          >
+                            CLAIM &amp; PAY ORDER (#{userEntry.reservation.order_id})
+                          </button>
+                        </>
+                      ) : isClosed || drop.status === "ENTRY_CLOSED" || drop.status === "SELECTING" || drop.status === "CLAIMING" || drop.status === "COMPLETED" ? (
+                        userEntry?.ranking ? (
+                          <div style={{ ...enteredBannerStyle, backgroundColor: "rgba(255, 153, 0, 0.08)", color: "#ff9900", borderColor: "#ff9900", flexDirection: "column", gap: "2px" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <Award size={14} /> QUEUE RANK #{userEntry.ranking} (Waitlist)
+                            </div>
+                            <span style={{ fontSize: "10px", color: "var(--text-muted)", fontWeight: "500" }}>
+                              Next in line if a winner forfeits.
+                            </span>
+                          </div>
+                        ) : (
+                          <div style={enteredBannerStyle}>
+                            <Award size={14} /> REGISTERED &bull; DRAW COMPLETED
+                          </div>
+                        )
+                      ) : (
+                        <div style={enteredBannerStyle}>
+                          <Award size={14} /> REGISTERED FOR DRAW (Size: {userEntry?.size || "Selected"})
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <button
                       onClick={() => handleOpenRaffleModal(drop.drop_id)}
-                      disabled={isClosed || !isLive}
+                      disabled={isClosed || !isLive || drop.status === "PAUSED" || drop.status === "COMPLETED" || drop.status === "CANCELLED"}
                       className={`btn ${isLoggedIn ? "btn-accent" : "btn-primary"}`}
                       style={actionBtnStyle}
                     >
-                      {isClosed ? (
-                        "DRAWING CLOSED"
+                      {drop.status === "COMPLETED" || isClosed ? (
+                        "DRAWING COMPLETED"
+                      ) : drop.status === "PAUSED" ? (
+                        "DRAWING PAUSED"
+                      ) : drop.status === "CANCELLED" ? (
+                        "DRAWING CANCELLED"
                       ) : !isLive ? (
                         "DRAWING UPCOMING"
                       ) : isLoggedIn ? (
@@ -495,19 +546,22 @@ const dropCardStyle = {
 
 const imgWrapperStyle = {
   position: "relative",
-  paddingTop: "90%",
+  height: "220px",
   backgroundColor: "#f9f9f9",
   overflow: "hidden",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
+  padding: "16px",
 };
 
 const imgStyle = {
-  position: "absolute",
-  maxWidth: "85%",
-  maxHeight: "85%",
+  maxWidth: "90%",
+  maxHeight: "90%",
+  width: "auto",
+  height: "auto",
   objectFit: "contain",
+  objectPosition: "center center",
 };
 
 const badgeContainerStyle = {

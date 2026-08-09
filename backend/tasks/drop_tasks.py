@@ -10,6 +10,7 @@ from backend.celery_app import celery_app, CelerySessionLocal
 from backend.models.entry import Entry
 from backend.models.reservations import Reservation
 from backend.models.order import Order
+from backend.models.products import Product
 from backend.models.drops import Drop
 from backend.models.order_items import OrderItem
 from backend.enums.drop_status import DropStatus
@@ -137,7 +138,8 @@ async def _select_winners(self, drop_id):
                 expire_unpaid_reservations.apply_async(
                     args=[reservation.reservation_id], eta=order.expires_at)
                         
-            drop.status == DropStatus.CLAIMING
+            drop.status = DropStatus.CLAIMING
+            await _check_and_complete_drop(drop, db)
             
             await db.commit()
             #await db.refresh(winners)
@@ -148,6 +150,65 @@ async def _select_winners(self, drop_id):
         
         finally:
             await db.close()
+
+async def _check_and_complete_drop(drop: Drop, db):
+    """
+    Checks if all entries for the drop have been processed and no active pending reservations remain.
+    Only runs if drop status is CLAIMING, ENTRY_CLOSED, or SELECTING.
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    # NEVER complete a drop that is still DRAFT, PAUSED, CANCELLED, or COMPLETED
+    if drop.status in (DropStatus.DRAFT, DropStatus.PAUSED, DropStatus.CANCELLED, DropStatus.COMPLETED):
+        return
+
+    # If drawing time has NOT closed yet, do not complete!
+    if now < drop.closes_at and drop.status in (DropStatus.SCHEDULED, DropStatus.ENTRY_OPEN):
+        return
+
+    stmt = select(Entry).where(Entry.drop_id == drop.drop_id).options(selectinload(Entry.reservation))
+    entries = (await db.execute(stmt)).scalars().all()
+
+    # If no entries were submitted and the drop has closed:
+    if not entries:
+        if now >= drop.closes_at:
+            if drop.drop_inventory > 0:
+                product = (
+                    await db.execute(
+                        select(Product).where(Product.product_id == drop.product_id)
+                    )
+                ).scalar_one_or_none()
+                if product:
+                    product.stock += drop.drop_inventory
+                drop.drop_inventory = 0
+
+            drop.status = DropStatus.COMPLETED
+            await db.flush()
+        return
+
+    unassigned_entries = [e for e in entries if e.reservation is None]
+
+    order_ids = [e.reservation.order_id for e in entries if e.reservation and e.reservation.order_id]
+
+    pending_orders = []
+    if order_ids:
+        orders_stmt = select(Order).where(Order.order_id.in_(order_ids), Order.status == OrderStatus.PENDING)
+        pending_orders = (await db.execute(orders_stmt)).scalars().all()
+
+    if not unassigned_entries and not pending_orders:
+        if drop.drop_inventory > 0:
+            product = (
+                await db.execute(
+                    select(Product).where(Product.product_id == drop.product_id)
+                )
+            ).scalar_one_or_none()
+            if product:
+                product.stock += drop.drop_inventory
+            drop.drop_inventory = 0
+
+        drop.status = DropStatus.COMPLETED
+        await db.flush()
 
 @celery_app.task(bind=True, max_retries=3)
 def select_winners(self, drop_id: int):
@@ -243,6 +304,8 @@ async def _expire_unpaid_reservations(self, reservation_id):
                     args=[new_reservation.reservation_id],
                     eta=new_order.expires_at 
                 )
+            
+            await _check_and_complete_drop(drop, db)
         
             await db.commit()
             if reservation:

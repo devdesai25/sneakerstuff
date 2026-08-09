@@ -54,7 +54,8 @@ class Entry(Base):
     reservation = relationship(
         "Reservation",
         back_populates="entry",
-        uselist=False
+        uselist=False,
+        cascade="all, delete-orphan"
     )
 
     __table_args__ = (

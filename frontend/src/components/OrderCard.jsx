@@ -104,7 +104,7 @@ export default function OrderCard({ order, onPay, onCancel, isPaying, isCancelli
           <DollarSign size={15} style={iconStyle} />
           <div>
             <span style={labelStyle}>Total Amount</span>
-            <span style={amountValueStyle}>${parseFloat(order.total_amount).toFixed(2)}</span>
+            <span style={amountValueStyle}>₹{parseFloat(order.total_amount).toFixed(2)}</span>
           </div>
         </div>
       </div>
@@ -122,7 +122,7 @@ export default function OrderCard({ order, onPay, onCancel, isPaying, isCancelli
                   {item.size && <span style={sizeBadgeStyle}>| Size: {item.size}</span>}
                 </span>
               </div>
-              <span style={itemPriceStyle}>${parseFloat(item.subtotal).toFixed(2)}</span>
+              <span style={itemPriceStyle}>₹{parseFloat(item.subtotal).toFixed(2)}</span>
             </div>
           ))}
         </div>

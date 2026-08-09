@@ -1,11 +1,18 @@
+import os
+from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import (
     create_async_engine,
     async_sessionmaker,
 )
 from sqlalchemy.pool import NullPool
 
-DATABASE_URL=(
-    "postgresql+asyncpg://postgres:63ZjZQfVXnfhUAyQ@db.qbqlymjwmjublnsgjpbq.supabase.co:5432/postgres"
+# Load environment variables from root or backend .env
+load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), "../../.env"))
+
+DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    os.environ.get("DATABASE_URL")
 )
 
 engine = create_async_engine(

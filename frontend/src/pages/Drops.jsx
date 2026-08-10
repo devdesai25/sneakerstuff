@@ -6,6 +6,8 @@ import { useToast } from "../components/common/Toast";
 import { DropCardSkeleton } from "../components/common/Skeleton";
 import api from "../services/api";
 import TurnstileWidget from "../components/TurnstileWidget";
+import { getVisitorId } from "../helpers/fingerprint";
+import { useDropRealtime } from "../hooks/useDropRealtime";
 import { Calendar, Clock, MapPin, ShieldAlert, Award, Send } from "lucide-react";
 
 // Mock Fallback Drops to display when the backend /drops public endpoint throws a 404
@@ -50,6 +52,9 @@ export default function Drops() {
   const toast = useToast();
   const navigate = useNavigate();
   const { isLoggedIn } = useContext(AuthContext);
+
+  // Subscribe to real-time WebSockets & SSE live updates
+  useDropRealtime(0);
 
   const [activeDropId, setActiveDropId] = useState(null);
   const [address, setAddress] = useState("");
@@ -99,11 +104,13 @@ export default function Drops() {
   // 3. Register user entry for drop
   const enterRaffleMutation = useMutation({
     mutationFn: async ({ dropId, shippingAddress, size, captchaToken }) => {
+      const deviceFingerprint = await getVisitorId();
       // Backend POST route to register drawing entries
       return await api.post(`/drops/${dropId}/entries`, { 
         address: shippingAddress, 
         size,
-        captcha_token: captchaToken 
+        captcha_token: captchaToken,
+        device_fingerprint: deviceFingerprint
       });
     },
     onSuccess: () => {

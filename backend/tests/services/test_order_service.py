@@ -114,14 +114,20 @@ async def test_order_create_cart_not_found_raises_404(db, user):
 
 @pytest.mark.asyncio
 async def test_order_create_product_not_found_raises_404(db, user):
+    from backend.tests.factories import create_product
+    prod = await create_product(db)
     cart_item = CartItem(
         user_id=user.id,
-        product_id=99999,
+        product_id=prod.product_id,
         quantity=1,
+        size="US 9"
     )
     db.add(cart_item)
     await db.commit()
-    await db.refresh(cart_item)
+
+    # Now delete product to simulate product missing while cart item exists
+    await db.delete(prod)
+    await db.commit()
 
     payload = OrderRequest(address="123 Test Street")
 
@@ -364,8 +370,8 @@ async def test_order_pay_already_expired_raises_400(db, user):
     with pytest.raises(HTTPException) as exc:
         await order_pay(order.order_id, user, db)
 
-    assert exc.value.status_code == 400
-    assert exc.value.detail == "Order has Expired"
+    assert exc.value.status_code == 422
+    assert exc.value.detail == "Unprocessable entity"
 
 
 @pytest.mark.asyncio

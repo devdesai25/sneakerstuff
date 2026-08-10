@@ -9,9 +9,10 @@ from backend.auth.jwt import hash_password
 
 async def create_product(db, **kwargs) -> Product:
     """
-    Creates a valid Product.
+    Creates a valid Product and seeds default ProductSize entries.
     Any field can be overridden using kwargs.
     """
+    from backend.models.product_sizes import ProductSize
 
     defaults = {
         "name": "Nike Dunk Low Panda",
@@ -19,7 +20,7 @@ async def create_product(db, **kwargs) -> Product:
         "price": 10,
         "stock": 200,
         "images": "https://encrypted-tbn0.gstatic.com/shopping?q=tbn:ANd9GcRmTrFwafYTR3xV0nCO3Pnr5o5eegfzAMgrxIO1hvQ2KLY3zchBJtbaXSzJKu-t-AjsghmBZJkXIo0WYTUOza58BnVnjx0pgzw8BHRYCOf-EclM_ICbbVGctg",
-        }
+    }
 
     defaults.update(kwargs)
 
@@ -28,6 +29,12 @@ async def create_product(db, **kwargs) -> Product:
     db.add(product)
     await db.commit()
     await db.refresh(product)
+
+    # Seed ProductSize records so cart and order operations succeed in tests
+    sizes = ["US 7", "US 8", "US 9", "US 10", "US 11"]
+    for sz in sizes:
+        db.add(ProductSize(product_id=product.product_id, size=sz, stock=50))
+    await db.commit()
 
     return product
 

@@ -64,15 +64,37 @@ async def create_entry(
                 status_code=400,
                 detail="You have already entered the drop"
             )
+
+        if address.device_fingerprint:
+            fp_entry = (
+                await db.execute(
+                    select(Entry)
+                    .where(Entry.drop_id == drop_id, Entry.device_fingerprint == address.device_fingerprint)
+                )
+            ).scalar_one_or_none()
+            if fp_entry:
+                raise HTTPException(
+                    status_code=400,
+                    detail="This device has already been used to register an entry for this drop."
+                )
+
         entry = Entry(
             drop_id = drop_id,
             user_id = user.id,
             address = address.address,
-            size = address.size
+            size = address.size,
+            device_fingerprint = address.device_fingerprint
         )
         db.add(entry)
         await db.commit()
         await db.refresh(entry)
+
+        from backend.services.websocket_manager import manager
+        await manager.broadcast_to_drop(drop_id, {
+            "event": "entry_updated",
+            "drop_id": drop_id,
+            "action": "created"
+        })
     
     except IntegrityError:
         await db.rollback()
@@ -119,6 +141,13 @@ async def delete_entry(
         
         await db.delete(entry)
         await db.commit()
+
+        from backend.services.websocket_manager import manager
+        await manager.broadcast_to_drop(drop_id, {
+            "event": "entry_updated",
+            "drop_id": drop_id,
+            "action": "deleted"
+        })
 
     except IntegrityError:
         await db.rollback()

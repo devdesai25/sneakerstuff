@@ -126,3 +126,36 @@ async def test_create_entry_route_invalid_captcha(client: AsyncClient, user_head
     assert response.status_code == 400
     assert "CAPTCHA verification failed" in response.json()["detail"]
 
+
+@pytest.mark.asyncio
+async def test_create_entry_duplicate_device_fingerprint(client: AsyncClient, user_headers: dict, admin_headers: dict, drop: Drop, db: AsyncSession):
+    """Test that two different users submitting from the same device fingerprint are rejected."""
+    drop.status = DropStatus.ENTRY_OPEN
+    await db.commit()
+
+    # User 1 submits entry with device fingerprint
+    res1 = await client.post(
+        f"/api/drops/{drop.drop_id}/entries",
+        json={
+            "address": "Device Test Address 1",
+            "captcha_token": "1x0000000000000000000000000000000AA",
+            "device_fingerprint": "test_device_hash_12345"
+        },
+        headers=user_headers
+    )
+    assert res1.status_code == 200
+
+    # User 2 attempts to submit entry with the exact same device fingerprint
+    res2 = await client.post(
+        f"/api/drops/{drop.drop_id}/entries",
+        json={
+            "address": "Device Test Address 2",
+            "captcha_token": "1x0000000000000000000000000000000AA",
+            "device_fingerprint": "test_device_hash_12345"
+        },
+        headers=admin_headers
+    )
+    assert res2.status_code == 400
+    assert "This device has already been used" in res2.json()["detail"]
+
+

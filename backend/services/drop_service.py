@@ -495,6 +495,17 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
 
     await db.commit()
     await db.refresh(drop)
+
+    try:
+        from backend.services.websocket_manager import manager
+        await manager.broadcast_to_drop(drop.drop_id, {
+            "event": "drop_status_updated",
+            "drop_id": drop.drop_id,
+            "status": drop.status.value if hasattr(drop.status, "value") else str(drop.status)
+        })
+    except Exception:
+        pass
+
     return drop
 
 async def drop_draw(drop_id: int, db: AsyncSession) -> Drop:

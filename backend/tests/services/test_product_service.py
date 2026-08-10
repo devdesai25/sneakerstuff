@@ -90,7 +90,7 @@ async def test_product_delete_not_found(db: AsyncSession):
         await product_delete(product_id=9999, db=db)
         
     assert exc_info.value.status_code == 404
-    assert exc_info.value.detail == "Product Not found"
+    assert exc_info.value.detail == "Product not found"
 
 @pytest.mark.asyncio
 async def test_product_delete_used_in_drop(db: AsyncSession, product: Product, drop):

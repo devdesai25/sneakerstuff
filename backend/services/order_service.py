@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from sqlalchemy import select, exists
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
@@ -119,7 +120,7 @@ async def order_create(
         )
 
         result = await db.execute(stmt)
-
+        new_order = result.scalar_one()
 
     except HTTPException:
         await db.rollback()

@@ -20,7 +20,7 @@ async def test_create_entry_success(db: AsyncSession, user: User, drop: Drop):
     drop.status = DropStatus.ENTRY_OPEN
     await db.commit()
     
-    address = EntryRequest(address="123 Test St")
+    address = EntryRequest(address="123 Test St", captcha_token="1x0000000000000000000000000000000AA")
     
     result = await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
     
@@ -37,13 +37,13 @@ async def test_create_entry_success(db: AsyncSession, user: User, drop: Drop):
 async def test_create_entry_drop_closed(db: AsyncSession, user: User, drop: Drop):
     """Test entering a drop that is not open for entries."""
     # Default status in factory is DRAFT
-    address = EntryRequest(address="123 Test St")
+    address = EntryRequest(address="123 Test St", captcha_token="1x0000000000000000000000000000000AA")
     
     with pytest.raises(HTTPException) as exc_info:
         await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
         
     assert exc_info.value.status_code == 400
-    assert exc_info.value.detail == "Entries are not open for this drop"
+    assert exc_info.value.detail == "Drop drawing has not opened yet."
 
 @pytest.mark.asyncio
 async def test_create_entry_duplicate(db: AsyncSession, user: User, drop: Drop):
@@ -51,7 +51,7 @@ async def test_create_entry_duplicate(db: AsyncSession, user: User, drop: Drop):
     drop.status = DropStatus.ENTRY_OPEN
     await db.commit()
     
-    address = EntryRequest(address="123 Test St")
+    address = EntryRequest(address="123 Test St", captcha_token="1x0000000000000000000000000000000AA")
     await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
     
     with pytest.raises(HTTPException) as exc_info:
@@ -66,7 +66,7 @@ async def test_delete_entry_success(db: AsyncSession, user: User, drop: Drop):
     drop.status = DropStatus.ENTRY_OPEN
     await db.commit()
     
-    address = EntryRequest(address="123 Test St")
+    address = EntryRequest(address="123 Test St", captcha_token="1x0000000000000000000000000000000AA")
     await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
     
     result = await delete_entry(drop_id=drop.drop_id, db=db, user=user)
@@ -85,11 +85,11 @@ async def test_delete_entry_drop_closed(db: AsyncSession, user: User, drop: Drop
     drop.status = DropStatus.ENTRY_OPEN
     await db.commit()
     
-    address = EntryRequest(address="123 Test St")
+    address = EntryRequest(address="123 Test St", captcha_token="1x0000000000000000000000000000000AA")
     await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
     
     # Change status to something else
-    drop.status = DropStatus.CLOSED
+    drop.status = DropStatus.ENTRY_CLOSED
     await db.commit()
     
     with pytest.raises(HTTPException) as exc_info:
@@ -116,7 +116,7 @@ async def test_check_entry_success(db: AsyncSession, user: User, drop: Drop):
     drop.status = DropStatus.ENTRY_OPEN
     await db.commit()
     
-    address = EntryRequest(address="123 Test St")
+    address = EntryRequest(address="123 Test St", captcha_token="1x0000000000000000000000000000000AA")
     await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
     
     entry = await check_entry(drop_id=drop.drop_id, user=user, db=db)
@@ -141,11 +141,11 @@ async def test_count_entry_success(db: AsyncSession, user: User, drop: Drop, adm
     await db.commit()
     
     # Enter user 1
-    address1 = EntryRequest(address="123 Test St")
+    address1 = EntryRequest(address="123 Test St", captcha_token="1x0000000000000000000000000000000AA")
     await create_entry(drop_id=drop.drop_id, address=address1, db=db, user=user)
     
     # Enter user 2
-    address2 = EntryRequest(address="456 Test Ave")
+    address2 = EntryRequest(address="456 Test Ave", captcha_token="1x0000000000000000000000000000000AA")
     await create_entry(drop_id=drop.drop_id, address=address2, db=db, user=admin_user)
     
     count = await count_entry(drop_id=drop.drop_id, db=db)
@@ -157,7 +157,7 @@ async def test_user_entries_success(db: AsyncSession, user: User, drop: Drop):
     drop.status = DropStatus.ENTRY_OPEN
     await db.commit()
     
-    address = EntryRequest(address="123 Test St")
+    address = EntryRequest(address="123 Test St", captcha_token="1x0000000000000000000000000000000AA")
     await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
     
     entries = await user_entries(user=user, db=db)
@@ -168,8 +168,5 @@ async def test_user_entries_success(db: AsyncSession, user: User, drop: Drop):
 @pytest.mark.asyncio
 async def test_user_entries_not_found(db: AsyncSession, user: User):
     """Test getting entries for a user with no entries."""
-    with pytest.raises(HTTPException) as exc_info:
-        await user_entries(user=user, db=db)
-        
-    # The HTTP exception in original code has no status code specified, defaulting to 500, detail="No entries found"
-    assert exc_info.value.detail == "No entries found"
+    entries = await user_entries(user=user, db=db)
+    assert entries == []

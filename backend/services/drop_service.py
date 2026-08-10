@@ -420,6 +420,14 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
     if drop.status in (DropStatus.COMPLETED, DropStatus.CANCELLED):
         return drop
 
+    stmt_drop = select(Drop).where(Drop.drop_id == drop.drop_id).with_for_update()
+    locked_drop = (await db.execute(stmt_drop)).scalar_one_or_none()
+    if locked_drop:
+        drop = locked_drop
+
+    if drop.status in (DropStatus.COMPLETED, DropStatus.CANCELLED):
+        return drop
+
     stmt = select(Entry).where(Entry.drop_id == drop.drop_id)
     entries = (await db.execute(stmt)).scalars().all()
 
@@ -453,7 +461,7 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
         sorted_entries = sorted(entries, key=lambda e: e.ranking or 999999)
         winners = sorted_entries[:drop.drop_inventory]
 
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
         for winner in winners:
             order = Order(

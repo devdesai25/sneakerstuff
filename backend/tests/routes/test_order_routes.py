@@ -37,7 +37,7 @@ async def test_pay_order_route(client: AsyncClient, user_headers: dict, db: Asyn
         total_amount=100.0,
         status=OrderStatus.PENDING,
         address="123 Main St",
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10)
     )
     db.add(order)
     await db.commit()
@@ -60,7 +60,7 @@ async def test_cancel_order_route(client: AsyncClient, user_headers: dict, db: A
         total_amount=100.0,
         status=OrderStatus.PENDING,
         address="123 Main St",
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15)
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=10)
     )
     db.add(order)
     await db.commit()

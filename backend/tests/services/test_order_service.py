@@ -1,7 +1,7 @@
 import pytest
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
@@ -125,17 +125,20 @@ async def test_order_create_product_not_found_raises_404(db, user):
     db.add(cart_item)
     await db.commit()
 
-    # Now delete product to simulate product missing while cart item exists
-    await db.delete(prod)
-    await db.commit()
-
     payload = OrderRequest(address="123 Test Street")
 
-    with pytest.raises(HTTPException) as exc:
-        await order_create(payload, user, db)
+    with patch.object(db, "execute") as mock_exec:
+        mock_cart = MagicMock()
+        mock_cart.scalars.return_value.all.return_value = [cart_item]
+        mock_prod = MagicMock()
+        mock_prod.scalar_one_or_none.return_value = None
+        mock_exec.side_effect = [mock_cart, mock_prod]
 
-    assert exc.value.status_code == 404
-    assert exc.value.detail == "Product not found"
+        with pytest.raises(HTTPException) as exc:
+            await order_create(payload, user, db)
+
+        assert exc.value.status_code == 404
+        assert exc.value.detail == "Product not found"
 
 
 @pytest.mark.asyncio
@@ -372,6 +375,53 @@ async def test_order_pay_already_expired_raises_400(db, user):
 
     assert exc.value.status_code == 422
     assert exc.value.detail == "Unprocessable entity"
+
+
+@pytest.mark.asyncio
+async def test_order_pay_expired_raffle_order_raises_422_not_resurrected(db, user):
+    from backend.models.entry import Entry
+    from backend.models.reservations import Reservation
+    from backend.models.drops import Drop
+    from backend.enums.drop_status import DropStatus
+
+    drop = Drop(
+        product_id=1,
+        opens_at=datetime.now(timezone.utc) - timedelta(hours=2),
+        closes_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        drop_inventory=1,
+        product_name="Raffle Shoe",
+        product_price=Decimal("150.00"),
+        status=DropStatus.CLAIMING
+    )
+    db.add(drop)
+    await db.commit()
+    await db.refresh(drop)
+
+    entry = Entry(drop_id=drop.drop_id, user_id=user.id, address="Raffle Addr")
+    db.add(entry)
+    await db.commit()
+    await db.refresh(entry)
+
+    order = Order(
+        user_id=user.id,
+        total_amount=Decimal("150.00"),
+        status=OrderStatus.EXPIRED,
+        expires_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+        address="Raffle Addr"
+    )
+    db.add(order)
+    await db.commit()
+    await db.refresh(order)
+
+    res = Reservation(entry_id=entry.entry_id, order_id=order.order_id)
+    db.add(res)
+    await db.commit()
+
+    with pytest.raises(HTTPException) as exc:
+        await order_pay(order.order_id, user, db)
+
+    assert exc.value.status_code == 422
+    assert order.status == OrderStatus.EXPIRED
 
 
 @pytest.mark.asyncio

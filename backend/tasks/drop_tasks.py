@@ -95,6 +95,18 @@ async def _select_winners(self, drop_id):
                 await db.commit()
                 return
             
+            reservations_stmt = (
+                select(Reservation)
+                .join(Entry, Entry.entry_id == Reservation.entry_id)
+                .where(Entry.drop_id == drop_id)
+            )
+            existing_reservations = (await db.execute(reservations_stmt)).scalars().all()
+            if existing_reservations:
+                drop.status = DropStatus.CLAIMING
+                await _check_and_complete_drop(drop, db)
+                await db.commit()
+                return
+
             stmt = (
                 select(Entry)
                 .where(Entry.drop_id == drop_id)
@@ -105,7 +117,7 @@ async def _select_winners(self, drop_id):
             result = await db.execute(stmt)
             winners = result.scalars().all()
             
-            expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
             for winner in winners:
                 order = Order(
@@ -271,7 +283,7 @@ async def _expire_unpaid_reservations(self, reservation_id):
                 # We have a new winner! Decrement drop inventory back by 1
                 drop.drop_inventory -= 1
                 
-                expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+                expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
                 new_order = Order(
                     user_id = new_winner.user_id,

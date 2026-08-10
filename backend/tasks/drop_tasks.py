@@ -120,7 +120,7 @@ async def _select_winners(self, drop_id):
 
                 order_item = OrderItem(
                     order_id = order.order_id,
-                    product_id = winner.drop.product_id,
+                    product_id = drop.product_id,
                     quantity = 1,
                     unit_price = drop.product_price,
                     subtotal = drop.product_price,

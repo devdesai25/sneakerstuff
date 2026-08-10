@@ -25,17 +25,14 @@ from backend.tests.test_database import (
 async def prepare_database():
     
     async with engine.begin() as conn:
-        await conn.execute(text("SET session_replication_role = 'replica';"))
+        await conn.execute(text("DROP TABLE IF EXISTS drop_sizes, order_items, reservations, entries, drops, product_sizes, products, users CASCADE;"))
         await conn.run_sync(Base.metadata.drop_all)
-        await conn.execute(text("SET session_replication_role = 'origin';"))
         await conn.run_sync(Base.metadata.create_all)
     
     yield
 
     async with engine.begin() as conn:
-        await conn.execute(text("SET session_replication_role = 'replica';"))
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.execute(text("SET session_replication_role = 'origin';"))
+        await conn.run_sync(Base.metadata.create_all)
 
 
 @pytest_asyncio.fixture

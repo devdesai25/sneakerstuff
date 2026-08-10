@@ -15,6 +15,14 @@ async def create_entry(
     db: AsyncSession, 
     user: User
 ) -> dict:  
+    from backend.services.turnstile_service import verify_turnstile_token
+    is_valid_captcha = await verify_turnstile_token(address.captcha_token)
+    if not is_valid_captcha:
+        raise HTTPException(
+            status_code=400,
+            detail="Cloudflare CAPTCHA verification failed. Please complete the CAPTCHA and try again."
+        )
+
     drop = await get_drop_or_404(drop_id, db)
 
     from datetime import datetime, timezone

@@ -12,7 +12,7 @@ async def test_create_entry_route(client: AsyncClient, user_headers: dict, drop:
     
     response = await client.post(
         f"/api/drops/{drop.drop_id}/entries",
-        json={"address": "Route Address 123"},
+        json={"address": "Route Address 123", "captcha_token": "1x0000000000000000000000000000000AA"},
         headers=user_headers
     )
     
@@ -24,12 +24,12 @@ async def test_create_entry_route_closed(client: AsyncClient, user_headers: dict
     """Test creating an entry when drop is not open via route."""
     response = await client.post(
         f"/api/drops/{drop.drop_id}/entries",
-        json={"address": "Route Address 123"},
+        json={"address": "Route Address 123", "captcha_token": "1x0000000000000000000000000000000AA"},
         headers=user_headers
     )
     
     assert response.status_code == 400
-    assert response.json()["detail"] == "Entries are not open for this drop"
+    assert response.json()["detail"] == "Drop drawing has not opened yet."
 
 @pytest.mark.asyncio
 async def test_delete_entry_route(client: AsyncClient, user_headers: dict, drop: Drop, db: AsyncSession):
@@ -39,7 +39,7 @@ async def test_delete_entry_route(client: AsyncClient, user_headers: dict, drop:
     
     await client.post(
         f"/api/drops/{drop.drop_id}/entries",
-        json={"address": "Route Address 123"},
+        json={"address": "Route Address 123", "captcha_token": "1x0000000000000000000000000000000AA"},
         headers=user_headers
     )
     
@@ -59,7 +59,7 @@ async def test_check_entry_me_route(client: AsyncClient, user_headers: dict, dro
     
     await client.post(
         f"/api/drops/{drop.drop_id}/entries",
-        json={"address": "Route Address 123"},
+        json={"address": "Route Address 123", "captcha_token": "1x0000000000000000000000000000000AA"},
         headers=user_headers
     )
     
@@ -80,7 +80,7 @@ async def test_count_entries_route(client: AsyncClient, user_headers: dict, drop
     
     await client.post(
         f"/api/drops/{drop.drop_id}/entries",
-        json={"address": "Route Address 123"},
+        json={"address": "Route Address 123", "captcha_token": "1x0000000000000000000000000000000AA"},
         headers=user_headers
     )
     
@@ -97,7 +97,7 @@ async def test_get_user_entries_route(client: AsyncClient, user_headers: dict, d
     
     await client.post(
         f"/api/drops/{drop.drop_id}/entries",
-        json={"address": "Route Address 123"},
+        json={"address": "Route Address 123", "captcha_token": "1x0000000000000000000000000000000AA"},
         headers=user_headers
     )
     
@@ -110,3 +110,19 @@ async def test_get_user_entries_route(client: AsyncClient, user_headers: dict, d
     data = response.json()
     assert len(data) == 1
     assert data[0]["drop_id"] == drop.drop_id
+
+@pytest.mark.asyncio
+async def test_create_entry_route_invalid_captcha(client: AsyncClient, user_headers: dict, drop: Drop, db: AsyncSession):
+    """Test creating an entry with invalid or missing captcha token fails."""
+    drop.status = DropStatus.ENTRY_OPEN
+    await db.commit()
+    
+    response = await client.post(
+        f"/api/drops/{drop.drop_id}/entries",
+        json={"address": "Route Address 123", "captcha_token": ""},
+        headers=user_headers
+    )
+    
+    assert response.status_code == 400
+    assert "CAPTCHA verification failed" in response.json()["detail"]
+

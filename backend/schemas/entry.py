@@ -4,6 +4,7 @@ from typing import Optional
 class EntryRequest(BaseModel):
     address: str
     size: str = "US 9"
+    captcha_token: Optional[str] = None
 
 class ReservationResponse(BaseModel):
     reservation_id: int

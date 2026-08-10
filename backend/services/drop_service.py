@@ -317,8 +317,6 @@ async def drop_publish(
     try:
         drop.status = DropStatus.SCHEDULED 
         product.stock -= drop.drop_inventory           
-        await db.commit()
-        await db.refresh(drop)
         
         activate_drop.apply_async(
             args=[drop.drop_id],
@@ -329,7 +327,14 @@ async def drop_publish(
             args=[drop.drop_id],
             eta=drop.closes_at,
         )
+
+        await db.commit()
+        await db.refresh(drop)
     
+    except HTTPException:
+        await db.rollback()
+        raise
+
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
@@ -337,9 +342,12 @@ async def drop_publish(
             detail="Database integrity error"
         )
     
-    except Exception:
+    except Exception as exc:
         await db.rollback()
-        raise
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to queue drop tasks to Celery broker: {str(exc)}"
+        )
     
     return drop
 

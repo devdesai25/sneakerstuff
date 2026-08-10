@@ -5,6 +5,7 @@ import { AuthContext } from "../context/AuthContext";
 import { useToast } from "../components/common/Toast";
 import { DropCardSkeleton } from "../components/common/Skeleton";
 import api from "../services/api";
+import TurnstileWidget from "../components/TurnstileWidget";
 import { Calendar, Clock, MapPin, ShieldAlert, Award, Send } from "lucide-react";
 
 // Mock Fallback Drops to display when the backend /drops public endpoint throws a 404
@@ -54,8 +55,18 @@ export default function Drops() {
   const [address, setAddress] = useState("");
   const [selectedSize, setSelectedSize] = useState("");
   const [activeTab, setActiveTab] = useState("ALL");
+  const [captchaToken, setCaptchaToken] = useState(null);
+  const [captchaResetKey, setCaptchaResetKey] = useState(0);
 
   const STANDARD_SIZES = ["US 7", "US 7.5", "US 8", "US 8.5", "US 9", "US 9.5", "US 10", "US 10.5", "US 11", "US 11.5", "US 12"];
+
+  const resetModalState = () => {
+    setActiveDropId(null);
+    setAddress("");
+    setSelectedSize("");
+    setCaptchaToken(null);
+    setCaptchaResetKey((prev) => prev + 1);
+  };
 
   // 1. Fetch drops (Publicly browseable)
   // Queries '/drops'. If it fails with 404, we catch the error and load MOCK_FALLBACK_DROPS.
@@ -87,21 +98,25 @@ export default function Drops() {
 
   // 3. Register user entry for drop
   const enterRaffleMutation = useMutation({
-    mutationFn: async ({ dropId, shippingAddress, size }) => {
+    mutationFn: async ({ dropId, shippingAddress, size, captchaToken }) => {
       // Backend POST route to register drawing entries
-      return await api.post(`/drops/${dropId}/entries`, { address: shippingAddress, size });
+      return await api.post(`/drops/${dropId}/entries`, { 
+        address: shippingAddress, 
+        size,
+        captcha_token: captchaToken 
+      });
     },
     onSuccess: () => {
       toast.success("Raffle entry submitted successfully!");
       queryClient.invalidateQueries({ queryKey: ["my-entries"] });
-      setActiveDropId(null);
-      setAddress("");
-      setSelectedSize("");
+      resetModalState();
     },
     onError: (err) => {
       // Gracefully catches any backend syntax errors (e.g. the db.add argument crash)
       const detail = err.response?.data?.detail || "Entry failed due to server error.";
       toast.error(detail);
+      setCaptchaToken(null);
+      setCaptchaResetKey((prev) => prev + 1);
     }
   });
 
@@ -111,6 +126,8 @@ export default function Drops() {
       navigate("/login");
       return;
     }
+    setCaptchaToken(null);
+    setCaptchaResetKey((prev) => prev + 1);
     setActiveDropId(dropId);
   };
 
@@ -124,7 +141,16 @@ export default function Drops() {
       toast.error("Please select your shoe size");
       return;
     }
-    enterRaffleMutation.mutate({ dropId: activeDropId, shippingAddress: address, size: selectedSize });
+    if (!captchaToken) {
+      toast.error("Please complete the CAPTCHA verification");
+      return;
+    }
+    enterRaffleMutation.mutate({ 
+      dropId: activeDropId, 
+      shippingAddress: address, 
+      size: selectedSize,
+      captchaToken 
+    });
   };
 
   // Helper to cross-reference entries from /users/me/entries as a fallback logic
@@ -340,7 +366,7 @@ export default function Drops() {
           <div className="premium-panel animate-fade-in" style={modalContentStyle}>
             <div style={modalHeaderStyle}>
               <h3>Enter Sneaker Draw</h3>
-              <button onClick={() => { setActiveDropId(null); setSelectedSize(""); }} style={closeBtnStyle}>✕</button>
+              <button onClick={resetModalState} style={closeBtnStyle}>✕</button>
             </div>
             
             <form onSubmit={handleRegisterEntry} style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -389,11 +415,20 @@ export default function Drops() {
                 <span style={modalWarningStyle}>All releases will ship directly to this address on winning drawing.</span>
               </div>
 
+              <div className="form-group">
+                <label className="form-label">Bot Protection (Cloudflare CAPTCHA)</label>
+                <TurnstileWidget 
+                  onVerify={(token) => setCaptchaToken(token)}
+                  onError={() => setCaptchaToken(null)}
+                  resetKey={captchaResetKey}
+                />
+              </div>
+
               <div style={modalActionsStyle}>
                 <button
                   type="button"
                   className="btn btn-outline"
-                  onClick={() => { setActiveDropId(null); setSelectedSize(""); }}
+                  onClick={resetModalState}
                   disabled={enterRaffleMutation.isPending}
                 >
                   CANCEL
@@ -401,7 +436,7 @@ export default function Drops() {
                 <button
                   type="submit"
                   className="btn btn-accent"
-                  disabled={enterRaffleMutation.isPending || !selectedSize}
+                  disabled={enterRaffleMutation.isPending || !selectedSize || !captchaToken}
                   style={{ gap: "8px" }}
                 >
                   {enterRaffleMutation.isPending ? "SUBMITTING..." : <>SUBMIT ENTRY <Send size={14} /></>}

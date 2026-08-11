@@ -21,6 +21,12 @@ from backend.tests.test_database import (
     TestingSessionLocal,
 )
 
+from unittest.mock import MagicMock
+
+@pytest.fixture(autouse=True)
+def mock_celery(monkeypatch):
+    monkeypatch.setattr("celery.app.task.Task.apply_async", MagicMock())
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def prepare_database():
     

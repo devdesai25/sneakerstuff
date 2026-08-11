@@ -378,14 +378,14 @@ async def test_order_pay_already_expired_raises_400(db, user):
 
 
 @pytest.mark.asyncio
-async def test_order_pay_expired_raffle_order_raises_422_not_resurrected(db, user):
+async def test_order_pay_expired_raffle_order_raises_422_not_resurrected(db, user, product):
     from backend.models.entry import Entry
     from backend.models.reservations import Reservation
     from backend.models.drops import Drop
     from backend.enums.drop_status import DropStatus
 
     drop = Drop(
-        product_id=1,
+        product_id=product.product_id,
         opens_at=datetime.now(timezone.utc) - timedelta(hours=2),
         closes_at=datetime.now(timezone.utc) - timedelta(hours=1),
         drop_inventory=1,

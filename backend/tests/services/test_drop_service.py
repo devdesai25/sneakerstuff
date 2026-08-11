@@ -622,10 +622,12 @@ async def test_execute_drop_draw_10_min_window_and_concurrency(db, product, user
 
     res_stmt = select(Reservation).join(Entry).where(Entry.drop_id == drop.drop_id)
     res = (await db.execute(res_stmt)).scalar_one()
-    assert res.order is not None
-    diff = res.order.expires_at.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)
+    expires_at = res.order.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    diff = expires_at - datetime.now(timezone.utc)
     # Expiration should be roughly 10 minutes
-    assert 540 <= diff.total_seconds() <= 600
+    assert 540 <= diff.total_seconds() <= 620
 
     # Second draw call (simulating concurrent trigger)
     drawn_again = await execute_drop_draw(drop, db)

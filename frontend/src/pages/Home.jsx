@@ -324,18 +324,18 @@ const heroImageContainerStyle = {
 };
 
 const heroImgStyle = {
-  maxWidth: "95%",
-  maxHeight: "420px",
+  maxWidth: "115%",
+  maxHeight: "504px",
   objectFit: "contain",
   zIndex: 2,
-  transform: "rotate(-14deg)",
+  transform: "rotate(-14deg) scale(1.2)",
   filter: "drop-shadow(0 25px 35px rgba(255, 42, 0, 0.25))",
 };
 
 const heroGlowStyle = {
   position: "absolute",
-  width: "320px",
-  height: "320px",
+  width: "384px",
+  height: "384px",
   borderRadius: "50%",
   background: "radial-gradient(circle, rgba(255,42,0,0.2) 0%, rgba(0,0,0,0) 70%)",
   zIndex: 1,

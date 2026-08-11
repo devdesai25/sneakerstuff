@@ -5,15 +5,23 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from backend.config import settings
 
 metadata = MetaData()
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    pool_size=10,
-    max_overflow=5,
-    connect_args={
+db_url = settings.DATABASE_URL
+if db_url and db_url.startswith("postgresql://"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+connect_args = {}
+if "asyncpg" in db_url:
+    connect_args = {
         "prepared_statement_cache_size": 0,
         "statement_cache_size": 0,
         "prepared_statement_name_func": lambda: f"__asyncpg_{uuid.uuid4().hex}__",
     }
+
+engine = create_async_engine(
+    db_url,
+    pool_size=10,
+    max_overflow=5,
+    connect_args=connect_args,
 )
 
 class Base(DeclarativeBase):

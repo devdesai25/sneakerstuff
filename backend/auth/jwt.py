@@ -21,7 +21,13 @@ async def hash_password_async(password: str) -> str:
     return await anyio.to_thread.run_sync(pwd_context.hash, password)
 
 async def verify_async(plain_password: str, hashed_password: str) -> bool:
-    return await anyio.to_thread.run_sync(pwd_context.verify, plain_password, hashed_password)
+    try:
+        if not plain_password or not hashed_password:
+            return False
+        return await anyio.to_thread.run_sync(pwd_context.verify, plain_password, hashed_password)
+    except Exception as exc:
+        print(f"Password verification error: {exc}")
+        return False
 
 def encode(data:dict):
     assert isinstance(data,dict)    

@@ -95,14 +95,23 @@ async def login_service(
     db: AsyncSession
 ) -> dict:
     """Authenticate users by looking up the email column (mapped from OAuth2 username)."""
-    
-    # Perform database lookup against the User.email column
-    # OAuth2PasswordRequestForm passes the email address in the 'username' field.
-    existing_user = (
-        await db.execute(
-            select(User).where(User.email == form_data.username)
+    if not form_data or not form_data.username or not form_data.password:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Password or Email"
         )
-    ).scalar_one_or_none()
+
+    try:
+        existing_user = (
+            await db.execute(
+                select(User).where(User.email == form_data.username)
+            )
+        ).scalar_one_or_none()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database connection error during login: {str(exc)}"
+        )
         
     if not existing_user:
         raise HTTPException(
@@ -122,7 +131,7 @@ async def login_service(
         "sub": str(existing_user.id),
         "username": existing_user.username,
         "email": existing_user.email,
-        "role": existing_user.role
+        "role": existing_user.role or "user"
         }
     )
 

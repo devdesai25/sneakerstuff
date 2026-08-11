@@ -75,13 +75,12 @@ async def test_signup_service_integrity_error(db: AsyncSession):
         password="securepassword123"
     )
     
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, patch
     from sqlalchemy.exc import IntegrityError
 
-    db.commit = AsyncMock(side_effect=IntegrityError(None, None, Exception()))
-    
-    with pytest.raises(HTTPException) as exc_info:
-        await signup_service(user=user_data, db=db)
+    with patch.object(db, "commit", AsyncMock(side_effect=IntegrityError("", "", ""))):
+        with pytest.raises(HTTPException) as exc_info:
+            await signup_service(user=user_data, db=db)
         
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == "Database Integrity Error"

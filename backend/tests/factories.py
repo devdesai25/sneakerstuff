@@ -24,6 +24,15 @@ async def create_product(db, **kwargs) -> Product:
 
     defaults.update(kwargs)
 
+    if "created_by" not in defaults or defaults["created_by"] is None:
+        from sqlalchemy import select
+        res = await db.execute(select(User.id).limit(1))
+        user_id = res.scalar_one_or_none()
+        if not user_id:
+            u = await create_user(db, username="factory_admin", role="admin")
+            user_id = u.id
+        defaults["created_by"] = user_id
+
     product = Product(**defaults)
 
     db.add(product)

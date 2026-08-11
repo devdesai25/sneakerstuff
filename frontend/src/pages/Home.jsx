@@ -77,7 +77,7 @@ export default function Home() {
             </div>
 
             <h1 style={heroHeadlineStyle}>
-              AIR JORDAN 1 RETRO HIGH OG
+              ASICS MEXICO 66 RETRO
             </h1>
             
             <p style={heroSubStyle}>
@@ -119,8 +119,8 @@ export default function Home() {
           <div style={heroImageContainerStyle}>
             <div className="hover-zoom" style={{ width: "100%", display: "flex", justifyContent: "center" }}>
               <img
-                src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=900"
-                alt="Featured Air Jordan Grail"
+                src="/asics-hero.png"
+                alt="Featured ASICS Onitsuka Tiger Mexico 66 Grail"
                 style={heroImgStyle}
               />
             </div>

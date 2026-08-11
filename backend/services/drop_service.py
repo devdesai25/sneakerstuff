@@ -317,8 +317,6 @@ async def drop_publish(
     try:
         drop.status = DropStatus.SCHEDULED 
         product.stock -= drop.drop_inventory           
-        await db.commit()
-        await db.refresh(drop)
         
         activate_drop.apply_async(
             args=[drop.drop_id],
@@ -329,7 +327,14 @@ async def drop_publish(
             args=[drop.drop_id],
             eta=drop.closes_at,
         )
+
+        await db.commit()
+        await db.refresh(drop)
     
+    except HTTPException:
+        await db.rollback()
+        raise
+
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
@@ -337,9 +342,12 @@ async def drop_publish(
             detail="Database integrity error"
         )
     
-    except Exception:
+    except Exception as exc:
         await db.rollback()
-        raise
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to queue drop tasks to Celery broker: {str(exc)}"
+        )
     
     return drop
 
@@ -412,6 +420,14 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
     if drop.status in (DropStatus.COMPLETED, DropStatus.CANCELLED):
         return drop
 
+    stmt_drop = select(Drop).where(Drop.drop_id == drop.drop_id).with_for_update()
+    locked_drop = (await db.execute(stmt_drop)).scalar_one_or_none()
+    if locked_drop:
+        drop = locked_drop
+
+    if drop.status in (DropStatus.COMPLETED, DropStatus.CANCELLED):
+        return drop
+
     stmt = select(Entry).where(Entry.drop_id == drop.drop_id)
     entries = (await db.execute(stmt)).scalars().all()
 
@@ -445,7 +461,7 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
         sorted_entries = sorted(entries, key=lambda e: e.ranking or 999999)
         winners = sorted_entries[:drop.drop_inventory]
 
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
         for winner in winners:
             order = Order(
@@ -487,6 +503,17 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
 
     await db.commit()
     await db.refresh(drop)
+
+    try:
+        from backend.services.websocket_manager import manager
+        await manager.broadcast_to_drop(drop.drop_id, {
+            "event": "drop_status_updated",
+            "drop_id": drop.drop_id,
+            "status": drop.status.value if hasattr(drop.status, "value") else str(drop.status)
+        })
+    except Exception:
+        pass
+
     return drop
 
 async def drop_draw(drop_id: int, db: AsyncSession) -> Drop:

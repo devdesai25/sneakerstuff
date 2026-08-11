@@ -593,3 +593,44 @@ async def test_drop_delete_integrity_error(db, product):
     
     assert exc.value.status_code == 409
     assert exc.value.detail == "Database integrity error"
+
+
+@pytest.mark.asyncio
+async def test_execute_drop_draw_10_min_window_and_concurrency(db, product, user):
+    from backend.services.drop_service import execute_drop_draw
+    from backend.models.entry import Entry
+    from backend.models.reservations import Reservation
+    from datetime import datetime, timezone, timedelta
+
+    drop = await create_drop(
+        db,
+        product,
+        drop_inventory=1,
+        status=DropStatus.ENTRY_CLOSED,
+        opens_at=datetime.now(timezone.utc) - timedelta(hours=2),
+        closes_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+
+    entry = Entry(drop_id=drop.drop_id, user_id=user.id, address="Test Addr 1")
+    db.add(entry)
+    await db.commit()
+    await db.refresh(entry)
+
+    # First draw call
+    drawn_drop = await execute_drop_draw(drop, db)
+    assert drawn_drop.status == DropStatus.CLAIMING
+
+    res_stmt = select(Reservation).join(Entry).where(Entry.drop_id == drop.drop_id)
+    res = (await db.execute(res_stmt)).scalar_one()
+    expires_at = res.order.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    diff = expires_at - datetime.now(timezone.utc)
+    # Expiration should be roughly 10 minutes
+    assert 540 <= diff.total_seconds() <= 620
+
+    # Second draw call (simulating concurrent trigger)
+    drawn_again = await execute_drop_draw(drop, db)
+    assert drawn_again.status == DropStatus.CLAIMING
+    all_res = (await db.execute(res_stmt)).scalars().all()
+    assert len(all_res) == 1

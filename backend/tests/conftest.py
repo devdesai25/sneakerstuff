@@ -5,6 +5,7 @@ from httpx import AsyncClient
 from httpx import ASGITransport
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from backend.main import app
 from backend.database import Base
@@ -20,17 +21,24 @@ from backend.tests.test_database import (
     TestingSessionLocal,
 )
 
+from unittest.mock import MagicMock
+
+@pytest.fixture(autouse=True)
+def mock_celery(monkeypatch):
+    monkeypatch.setattr("celery.app.task.Task.apply_async", MagicMock())
+
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def prepare_database():
     
     async with engine.begin() as conn:
+        await conn.execute(text("DROP TABLE IF EXISTS drop_sizes, order_items, reservations, entries, drops, product_sizes, products, users CASCADE;"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     
     yield
 
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
 
 
 @pytest_asyncio.fixture

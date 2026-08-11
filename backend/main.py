@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from backend.routes import (
     auth_router,
+    me_router,
     product_router,
     cart_router,
     order_router,
@@ -22,6 +23,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api")
+app.include_router(me_router, prefix="/api")
 app.include_router(product_router, prefix="/api")
 app.include_router(cart_router, prefix="/api")
 app.include_router(order_router, prefix="/api")

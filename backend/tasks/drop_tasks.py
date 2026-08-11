@@ -43,15 +43,14 @@ async def _close_drop(self, drop_id):
         try:    
             drop = await get_drop_or_404(drop_id, db)
             drop.status = DropStatus.ENTRY_CLOSED
-            await db.flush()
 
-            entries = await get_entries_or_404(drop_id, db)
+            stmt = select(Entry).where(Entry.drop_id == drop_id)
+            entries = (await db.execute(stmt)).scalars().all()
 
             if not entries:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Entries not found"
-                )
+                await _check_and_complete_drop(drop, db)
+                await db.commit()
+                return
             
             random.shuffle(entries)
 
@@ -76,7 +75,6 @@ def close_drop(self, drop_id:int):
 async def _select_winners(self, drop_id):
     async with CelerySessionLocal() as db: 
 
-
         try:
             drop = (
                 await db.execute(
@@ -86,14 +84,29 @@ async def _select_winners(self, drop_id):
                 )
             ).scalar_one_or_none()
 
-            entries = await get_entries_or_404(drop_id, db)
+            if not drop:
+                return
+
+            stmt = select(Entry).where(Entry.drop_id == drop_id)
+            entries = (await db.execute(stmt)).scalars().all()
 
             if not entries:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Entries not found"
-                )
+                await _check_and_complete_drop(drop, db)
+                await db.commit()
+                return
             
+            reservations_stmt = (
+                select(Reservation)
+                .join(Entry, Entry.entry_id == Reservation.entry_id)
+                .where(Entry.drop_id == drop_id)
+            )
+            existing_reservations = (await db.execute(reservations_stmt)).scalars().all()
+            if existing_reservations:
+                drop.status = DropStatus.CLAIMING
+                await _check_and_complete_drop(drop, db)
+                await db.commit()
+                return
+
             stmt = (
                 select(Entry)
                 .where(Entry.drop_id == drop_id)
@@ -104,7 +117,7 @@ async def _select_winners(self, drop_id):
             result = await db.execute(stmt)
             winners = result.scalars().all()
             
-            expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
             for winner in winners:
                 order = Order(
@@ -119,7 +132,7 @@ async def _select_winners(self, drop_id):
 
                 order_item = OrderItem(
                     order_id = order.order_id,
-                    product_id = winner.drop.product_id,
+                    product_id = drop.product_id,
                     quantity = 1,
                     unit_price = drop.product_price,
                     subtotal = drop.product_price,
@@ -270,7 +283,7 @@ async def _expire_unpaid_reservations(self, reservation_id):
                 # We have a new winner! Decrement drop inventory back by 1
                 drop.drop_inventory -= 1
                 
-                expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+                expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
                 new_order = Order(
                     user_id = new_winner.user_id,

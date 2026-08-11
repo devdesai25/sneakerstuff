@@ -6,12 +6,24 @@ from backend.models.drops import Drop
 from backend.models.entry import Entry
 
 async def drop_get(db: AsyncSession) -> list[Drop]:
+    from datetime import datetime, timezone
+    from backend.enums.drop_status import DropStatus
 
     drops = (
         await db.execute(
             select(Drop)
         )
     ).scalars().all()
+
+    now = datetime.now(timezone.utc)
+    updated = False
+    for drop in drops:
+        if drop.status in (DropStatus.SCHEDULED, DropStatus.ENTRY_OPEN) and now >= drop.closes_at:
+            drop.status = DropStatus.ENTRY_CLOSED
+            updated = True
+
+    if updated:
+        await db.commit()
     
     return drops
 

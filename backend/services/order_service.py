@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from sqlalchemy import select, exists
 from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import IntegrityError
@@ -119,7 +120,7 @@ async def order_create(
         )
 
         result = await db.execute(stmt)
-
+        new_order = result.scalar_one()
 
     except HTTPException:
         await db.rollback()
@@ -155,9 +156,6 @@ async def order_pay(
         )
     ).scalar_one_or_none()
 
-    if order.status == OrderStatus.EXPIRED and reservation:
-        order.status = OrderStatus.PENDING
-
     if order.status != OrderStatus.PENDING:
         raise HTTPException(
             status_code=422,
@@ -169,13 +167,22 @@ async def order_pay(
     if expires_at and expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
 
-    if (
-        not reservation
-        and order.status == OrderStatus.PENDING 
-        and expires_at 
-        and now > expires_at
-    ):  
-        await restore_stock(order, db)
+    if expires_at and now > expires_at:
+        if not reservation:
+            await restore_stock(order, db)
+        else:
+            from backend.models.drops import Drop
+            from backend.tasks.drop_tasks import _check_and_complete_drop
+            if reservation.entry:
+                drop = (
+                    await db.execute(
+                        select(Drop).where(Drop.drop_id == reservation.entry.drop_id).with_for_update()
+                    )
+                ).scalar_one_or_none()
+                if drop:
+                    drop.drop_inventory += 1
+                    await _check_and_complete_drop(drop, db)
+
         order.status = OrderStatus.EXPIRED
         await db.commit()
 
@@ -195,7 +202,7 @@ async def order_pay(
                         select(ProductSize).where(
                             ProductSize.product_id == item.product_id,
                             ProductSize.size == item.size
-                        )
+                        ).with_for_update()
                     )
                 ).scalar_one_or_none()
                 if p_size and p_size.stock > 0:
@@ -324,7 +331,7 @@ async def order_cancel(
 
                     if next_winner:
                         drop.drop_inventory -= 1
-                        expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+                        expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
                         new_order = Order(
                             user_id=next_winner.user_id,
                             total_amount=drop.product_price,

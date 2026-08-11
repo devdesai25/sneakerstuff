@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi.responses import StreamingResponse
+import asyncio
+import json
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,17 +17,61 @@ from backend.services.drop_service import (
     drop_cancel, drop_publish,
     drop_pause, drop_resume, drop_draw, execute_drop_draw
 )
+from backend.services.websocket_manager import manager
 
 router = APIRouter()
+
+@router.websocket("/ws/drops/{drop_id}")
+async def websocket_drop_endpoint(websocket: WebSocket, drop_id: int):
+    """WebSocket endpoint for real-time drop status and entry updates."""
+    await manager.connect(websocket, drop_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text(json.dumps({"event": "pong"}))
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, drop_id)
+    except Exception:
+        manager.disconnect(websocket, drop_id)
+
+@router.get("/drops/{drop_id}/stream")
+async def sse_drop_stream(drop_id: int):
+    """SSE endpoint for serverless environments (Vercel compatibility)."""
+    async def event_generator():
+        yield f"data: {json.dumps({'event': 'connected', 'drop_id': drop_id})}\n\n"
+        while True:
+            await asyncio.sleep(15)
+            yield f"data: {json.dumps({'event': 'heartbeat'})}\n\n"
+
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    )
 
 @router.get("/drops", response_model = list[DropResponse])
 async def get_public_drops(
     db: AsyncSession = Depends(get_db)
 ):
     """Retrieve all published drops (excluding DRAFT and hidden statuses) for public users."""
+    from datetime import datetime, timezone
+
     stmt = select(Drop).where(Drop.status != DropStatus.DRAFT, Drop.is_visible == True)
     result = await db.execute(stmt)
-    return result.scalars().all()
+    drops = result.scalars().all()
+
+    now = datetime.now(timezone.utc)
+    updated = False
+    for drop in drops:
+        if drop.status in (DropStatus.SCHEDULED, DropStatus.ENTRY_OPEN) and now >= drop.closes_at:
+            drop.status = DropStatus.ENTRY_CLOSED
+            updated = True
+
+    if updated:
+        await db.commit()
+
+    return drops
 
 @router.get("/admin/drop", response_model = list[DropResponse])
 async def get_drop(

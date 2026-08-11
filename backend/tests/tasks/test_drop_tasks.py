@@ -19,10 +19,17 @@ class DummyTask:
 
 @pytest.fixture
 def mock_celery_session(db: AsyncSession):
-    """Fixture to mock CelerySessionLocal to return the test db session."""
-    # We need to mock the async context manager returned by CelerySessionLocal()
+    """Fixture to mock CelerySessionLocal to return the test db session without closing it prematurely."""
+    mock_session = AsyncMock()
+    mock_session.commit = db.commit
+    mock_session.rollback = db.rollback
+    mock_session.execute = db.execute
+    mock_session.add = db.add
+    mock_session.flush = db.flush
+    mock_session.close = AsyncMock()
+    
     mock_cm = AsyncMock()
-    mock_cm.__aenter__.return_value = db
+    mock_cm.__aenter__.return_value = mock_session
     mock_cm.__aexit__.return_value = None
     return mock_cm
 
@@ -34,8 +41,9 @@ async def test_activate_drop_success(db: AsyncSession, drop: Drop, mock_celery_s
     with patch('backend.tasks.drop_tasks.CelerySessionLocal', return_value=mock_celery_session):
         await _activate_drop(task, drop.drop_id)
         
-    await db.refresh(drop)
-    assert drop.status == DropStatus.ENTRY_OPEN
+    res = await db.execute(select(Drop).where(Drop.drop_id == drop.drop_id))
+    updated_drop = res.scalar_one()
+    assert updated_drop.status == DropStatus.ENTRY_OPEN
 
 @pytest.mark.asyncio
 async def test_close_drop_success(db: AsyncSession, drop: Drop, user: User, mock_celery_session):
@@ -45,16 +53,18 @@ async def test_close_drop_success(db: AsyncSession, drop: Drop, user: User, mock
     await db.commit()
     
     # Add an entry
-    address = EntryRequest(address="123 Test St")
-    await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
+    address = EntryRequest(address="123 Test St", captcha_token="valid_token")
+    with patch('backend.services.turnstile_service.verify_turnstile_token', return_value=True):
+        await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
     
     with patch('backend.tasks.drop_tasks.CelerySessionLocal', return_value=mock_celery_session):
         with patch('backend.tasks.drop_tasks.select_winners.apply_async') as mock_apply:
             await _close_drop(task, drop.drop_id)
             mock_apply.assert_called_once_with(args=[drop.drop_id], countdown=30)
             
-    await db.refresh(drop)
-    assert drop.status == DropStatus.ENTRY_CLOSED
+    res = await db.execute(select(Drop).where(Drop.drop_id == drop.drop_id))
+    updated_drop = res.scalar_one()
+    assert updated_drop.status == DropStatus.ENTRY_CLOSED
     
     # Verify rankings assigned
     db_entry = (
@@ -68,17 +78,20 @@ async def test_close_drop_success(db: AsyncSession, drop: Drop, user: User, mock
 async def test_select_winners_success(db: AsyncSession, drop: Drop, user: User, mock_celery_session):
     """Test selecting winners for a closed drop."""
     task = DummyTask()
-    drop.status = DropStatus.ENTRY_CLOSED
+    drop.status = DropStatus.ENTRY_OPEN
     drop.drop_inventory = 1
     await db.commit()
     
     # Add entry
-    address = EntryRequest(address="123 Test St")
-    await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
+    address = EntryRequest(address="123 Test St", captcha_token="valid_token")
+    with patch('backend.services.turnstile_service.verify_turnstile_token', return_value=True):
+        await create_entry(drop_id=drop.drop_id, address=address, db=db, user=user)
+        
     db_entry = (
         await db.execute(select(Entry).where(Entry.drop_id == drop.drop_id))
     ).scalar_one()
     db_entry.ranking = 1
+    drop.status = DropStatus.ENTRY_CLOSED
     await db.commit()
     
     with patch('backend.tasks.drop_tasks.CelerySessionLocal', return_value=mock_celery_session):
@@ -86,9 +99,10 @@ async def test_select_winners_success(db: AsyncSession, drop: Drop, user: User, 
             await _select_winners(task, drop.drop_id)
             mock_apply.assert_called_once()
             
-    await db.refresh(drop)
+    res = await db.execute(select(Drop).where(Drop.drop_id == drop.drop_id))
+    updated_drop = res.scalar_one()
     # Inventory should be reduced by 1
-    assert drop.drop_inventory == 0
+    assert updated_drop.drop_inventory == 0
     # A reservation and order should be created
     from backend.models.reservations import Reservation
     from backend.models.order import Order

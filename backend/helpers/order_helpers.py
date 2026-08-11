@@ -52,8 +52,11 @@ async def get_order_one_or_404(
     return order
 
 async def restore_stock(order: Order, db: AsyncSession):
+    from backend.models.order_items import OrderItem
+    items_stmt = select(OrderItem).where(OrderItem.order_id == order.order_id)
+    items = (await db.execute(items_stmt)).scalars().all()
 
-    for item in order.order_items:
+    for item in items:
         product = (
             await db.execute(
                 select(Product).where(Product.product_id == item.product_id)

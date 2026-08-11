@@ -41,6 +41,12 @@ class Entry(Base):
         nullable=False,
         default="US 9"
     )
+
+    device_fingerprint = Column(
+        String,
+        nullable=True,
+        index=True
+    )
     user = relationship(
         "User",
         back_populates="entries"

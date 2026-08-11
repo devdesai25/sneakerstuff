@@ -1,5 +1,5 @@
 from backend.database import Base
-from sqlalchemy import Column, String, Numeric, Integer, ForeignKey, DateTime
+from sqlalchemy import Column, String, Numeric, Integer, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .users import User
@@ -23,6 +23,9 @@ class Product(Base):
     created_by = Column(Integer, ForeignKey("users.id"),nullable=False)
 
     images = Column(String, nullable= False)
+
+    is_reserved_for_drop = Column(Boolean, nullable=False, default=False, server_default="false")
+    is_visible = Column(Boolean, nullable=False, default=True, server_default="true")
 
     cart_items = relationship("CartItem", back_populates="product")
     order_items = relationship("OrderItem", back_populates="product", cascade="all, delete-orphan")

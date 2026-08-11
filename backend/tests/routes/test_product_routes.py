@@ -83,3 +83,48 @@ async def test_delete_product_admin(client: AsyncClient, admin_headers: dict, pr
     
     assert response.status_code == 200
     assert response.json() == {"message": "Product deleted successfully"}
+
+@pytest.mark.asyncio
+async def test_toggle_product_visibility_admin(client: AsyncClient, admin_headers: dict, product: Product):
+    """Test toggling product visibility as admin."""
+    # Initially visible
+    assert product.is_visible is True
+    
+    # Toggle to hidden
+    res1 = await client.patch(f"/api/admin/products/{product.product_id}/toggle-visibility", headers=admin_headers)
+    assert res1.status_code == 200
+    assert res1.json()["is_visible"] is False
+
+    # Hidden product should not be in public GET /api/products by default
+    res2 = await client.get("/api/products")
+    assert res2.status_code == 200
+    ids = [p["product_id"] for p in res2.json()]
+    assert product.product_id not in ids
+
+    # Hidden product IS returned when include_hidden=true
+    res3 = await client.get("/api/products?include_hidden=true")
+    assert res3.status_code == 200
+    ids3 = [p["product_id"] for p in res3.json()]
+    assert product.product_id in ids3
+
+@pytest.mark.asyncio
+async def test_toggle_product_reserved_admin(client: AsyncClient, admin_headers: dict, user_headers: dict, product: Product):
+    """Test toggling product drop-reserved status as admin and verifying cart block."""
+    # Initially not reserved
+    assert product.is_reserved_for_drop is False
+
+    # Toggle to reserved
+    res1 = await client.patch(f"/api/admin/products/{product.product_id}/toggle-reserved", headers=admin_headers)
+    assert res1.status_code == 200
+    assert res1.json()["is_reserved_for_drop"] is True
+
+    # Try adding reserved product to cart -> should fail 400
+    cart_payload = {
+        "product_id": product.product_id,
+        "quantity": 1,
+        "size": "US 9"
+    }
+    res2 = await client.post("/api/cart", json=cart_payload, headers=user_headers)
+    assert res2.status_code == 400
+    assert "reserved for an upcoming drop" in res2.json()["detail"]
+

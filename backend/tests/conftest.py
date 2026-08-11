@@ -10,6 +10,7 @@ from sqlalchemy import text
 from backend.main import app
 from backend.database import Base
 from backend.database import get_db
+import backend.models
 from backend.auth.jwt import encode
 from backend.tests.factories import (
     create_drop,

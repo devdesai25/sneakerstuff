@@ -56,6 +56,27 @@ async def seed():
         else:
             print(f"Product already exists (ID {product.product_id})")
 
+        # 2b. Seed Drop-Reserved Product
+        reserved_prod = (await db.execute(select(Product).where(Product.name.ilike("%Travis Scott%")))).scalars().first()
+        if not reserved_prod:
+            reserved_prod = Product(
+                name="Travis Scott x Air Jordan 1 Low 'Reverse Mocha'",
+                description="Upcoming grail reserved exclusively for the shock drop raffle. Preview only.",
+                price=190.00,
+                stock=25,
+                created_by=user.id,
+                images="https://images.unsplash.com/photo-1552346154-21d32810aba3?q=80&w=600",
+                is_reserved_for_drop=True,
+                is_visible=True
+            )
+            db.add(reserved_prod)
+            await db.commit()
+            await db.refresh(reserved_prod)
+            for sz in ["US 7", "US 8", "US 9", "US 10", "US 11"]:
+                db.add(ProductSize(product_id=reserved_prod.product_id, size=sz, stock=5))
+            await db.commit()
+            print(f"Created sample drop-reserved product (ID {reserved_prod.product_id})")
+
         # 3. Seed Sample Drop
         drop = (await db.execute(select(Drop))).scalars().first()
         if not drop:

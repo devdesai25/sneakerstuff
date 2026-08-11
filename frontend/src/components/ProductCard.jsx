@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Heart, ShoppingBag, Eye } from "lucide-react";
+import { Heart, ShoppingBag, Eye, Flame } from "lucide-react";
 import { useState } from "react";
 
 export default function ProductCard({ product, onAddToCart }) {
@@ -29,6 +29,8 @@ export default function ProductCard({ product, onAddToCart }) {
     }).format(price);
   };
 
+  const isReserved = product.is_reserved_for_drop;
+
   return (
     <div className="snkrs-card" style={cardStyle}>
       {/* Product Image Panel */}
@@ -53,8 +55,12 @@ export default function ProductCard({ product, onAddToCart }) {
           <Heart size={16} fill={isWishlisted ? "var(--accent-red)" : "none"} stroke={isWishlisted ? "var(--accent-red)" : "currentColor"} />
         </button>
 
-        {/* Stock status badge overlay */}
-        {product.stock <= 0 ? (
+        {/* Stock / Drop Reserved status badge overlay */}
+        {isReserved ? (
+          <span className="badge" style={{ ...badgeOverlayStyle, backgroundColor: "#E30613", color: "#FFFFFF", gap: "4px" }}>
+            <Flame size={12} fill="#FFF" /> RESERVED FOR DROP
+          </span>
+        ) : product.stock <= 0 ? (
           <span className="badge badge-danger" style={badgeOverlayStyle}>SOLD OUT</span>
         ) : product.stock <= 5 ? (
           <span className="badge badge-warning" style={badgeOverlayStyle}>ONLY {product.stock} LEFT</span>
@@ -77,7 +83,15 @@ export default function ProductCard({ product, onAddToCart }) {
         <Link to={`/product/${product.product_id}`} className="btn btn-outline" style={{ flex: 1, padding: "10px", fontSize: "11px", gap: "4px" }}>
           <Eye size={13} /> DETAILS
         </Link>
-        {onAddToCart && (
+        {isReserved ? (
+          <Link
+            to={`/product/${product.product_id}`}
+            className="btn btn-outline"
+            style={{ flex: 1.2, padding: "10px", fontSize: "11px", gap: "4px", color: "var(--accent-red)", borderColor: "var(--accent-red)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+          >
+            <Flame size={13} /> DROP PREVIEW
+          </Link>
+        ) : onAddToCart !== false && (
           <Link
             to={`/product/${product.product_id}`}
             className="btn btn-primary"

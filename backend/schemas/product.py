@@ -28,6 +28,8 @@ class ProductResponse(BaseModel):
     price : float
     stock: int
     images: str | None = None
+    is_reserved_for_drop: bool = False
+    is_visible: bool = True
     sizes: List[ProductSizeResponse] = []
     
     model_config = ConfigDict(from_attributes=True)
@@ -38,6 +40,8 @@ class ProductUpdate(BaseModel):
     stock : Optional[int] = None
     price : Optional[float] = None
     images: str | None = None
+    is_reserved_for_drop: Optional[bool] = None
+    is_visible: Optional[bool] = None
     sizes: Optional[List[ProductSizeSchema]] = None
     
 class ProductCreate(BaseModel):
@@ -47,4 +51,6 @@ class ProductCreate(BaseModel):
     stock : int
     price : float 
     images: str | None = None
+    is_reserved_for_drop: bool = False
+    is_visible: bool = True
     sizes: List[ProductSizeSchema] = []

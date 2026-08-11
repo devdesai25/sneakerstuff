@@ -5,7 +5,7 @@ import { AuthContext } from "../context/AuthContext";
 import { useToast } from "../components/common/Toast";
 import { ProductDetailsSkeleton } from "../components/common/Skeleton";
 import api from "../services/api";
-import { ShoppingCart, ChevronLeft, ShieldCheck, Truck, RefreshCw } from "lucide-react";
+import { ShoppingCart, ChevronLeft, ShieldCheck, Truck, RefreshCw, Flame } from "lucide-react";
 
 export default function ProductDetails() {
   const { id } = useParams();
@@ -97,6 +97,7 @@ export default function ProductDetails() {
   }
 
   const isOutOfStock = product.stock <= 0;
+  const isReserved = product.is_reserved_for_drop;
   const imageUrl = product.images 
     ? product.images.split(",")[0] 
     : "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=600&auto=format&fit=crop";
@@ -120,7 +121,11 @@ export default function ProductDetails() {
         <div style={buyPanelStyle}>
           {/* Badge & Title */}
           <div>
-            {isOutOfStock ? (
+            {isReserved ? (
+              <span className="badge" style={{ backgroundColor: "#E30613", color: "#FFFFFF", display: "inline-flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                <Flame size={14} fill="#FFF" /> RESERVED FOR DROP
+              </span>
+            ) : isOutOfStock ? (
               <span className="badge badge-danger">OUT OF STOCK</span>
             ) : product.stock < 5 ? (
               <span className="badge badge-warning">ONLY {product.stock} PAIRS LEFT</span>
@@ -131,6 +136,23 @@ export default function ProductDetails() {
             <span style={priceStyle}>₹{Number(product.price).toFixed(2)}</span>
           </div>
 
+          {/* Reserved for Drop Banner Notice */}
+          {isReserved && (
+            <div style={{ padding: "16px", backgroundColor: "rgba(227, 6, 19, 0.1)", border: "1px solid var(--accent-red)", borderRadius: "6px", color: "#FFF" }}>
+              <div style={{ fontWeight: "800", fontSize: "14px", display: "flex", alignItems: "center", gap: "6px", color: "var(--accent-red)" }}>
+                <Flame size={16} /> UPCOMING DROP PREVIEW ONLY
+              </div>
+              <p style={{ margin: "6px 0 0 0", color: "var(--text-muted)", fontSize: "13px", lineHeight: "1.5" }}>
+                This sneaker is reserved for an upcoming raffle drop and cannot be purchased directly. Visit the drops page to participate when entries open!
+              </p>
+              <div style={{ marginTop: "12px" }}>
+                <Link to="/drops" className="btn btn-accent" style={{ padding: "8px 16px", fontSize: "12px", display: "inline-flex", gap: "6px" }}>
+                  VIEW ACTIVE DROPS
+                </Link>
+              </div>
+            </div>
+          )}
+
           {/* Description */}
           <div>
             <h4 style={subHeadingStyle}>DESCRIPTION</h4>
@@ -140,7 +162,7 @@ export default function ProductDetails() {
           </div>
 
           {/* Size Selector */}
-          {!isOutOfStock && (
+          {!isReserved && !isOutOfStock && (
             <div>
               <h4 style={subHeadingStyle}>SELECT SIZE</h4>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '24px' }}>
@@ -180,8 +202,12 @@ export default function ProductDetails() {
             </div>
           )}
 
-          {/* Quantity selector & Add to cart */}
-          {!isOutOfStock && (
+          {/* Quantity selector & Add to cart or Reserved disabled button */}
+          {isReserved ? (
+            <button disabled className="btn btn-outline" style={{ width: "100%", padding: "16px", cursor: "not-allowed", opacity: 0.7, borderColor: "var(--accent-red)", color: "var(--accent-red)", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px", fontWeight: "800" }}>
+              <Flame size={18} /> DIRECT PURCHASE DISABLED (RESERVED FOR DROP)
+            </button>
+          ) : !isOutOfStock && (
             <div style={controlsRowStyle}>
               <div style={qtySelectorStyle}>
                 <button 

@@ -27,21 +27,24 @@ router = APIRouter(
 def home():
     return {"message":"backend connected"}
 
-from backend.services.redis_service import get_cache, set_cache
+from backend.services.redis_service import get_cache, set_cache, invalidate_cache
 
 @router.get("/products", response_model= list[ProductResponse])
 async def get_products(
     limit: int = 10, 
     offset: int = 0,
     q: Optional[str] = None,
+    include_hidden: Optional[bool] = False,
     db: AsyncSession = Depends(get_db)
 ):
-    cache_key = f"products:list:{limit}:{offset}:{q or ''}"
+    cache_key = f"products:list:{limit}:{offset}:{q or ''}:{include_hidden}"
     cached = await get_cache(cache_key)
     if cached:
         return cached
 
     stmt = select(Product).options(selectinload(Product.sizes))
+    if not include_hidden:
+        stmt = stmt.where(Product.is_visible == True)
     if q:
         stmt = stmt.where(Product.name.ilike(f"%{q}%"))
     stmt = stmt.offset(offset).limit(limit)
@@ -55,6 +58,8 @@ async def get_products(
             "price": float(p.price),
             "stock": p.stock,
             "images": p.images,
+            "is_reserved_for_drop": p.is_reserved_for_drop,
+            "is_visible": p.is_visible,
             "sizes": [{"id": s.id, "size": s.size, "stock": s.stock} for s in p.sizes]
         }
         for p in all_prod
@@ -84,6 +89,8 @@ async def get_product_by_id(
         "price": float(product.price),
         "stock": product.stock,
         "images": product.images,
+        "is_reserved_for_drop": product.is_reserved_for_drop,
+        "is_visible": product.is_visible,
         "sizes": [{"id": s.id, "size": s.size, "stock": s.stock} for s in product.sizes]
     }
     await set_cache(cache_key, serialized, ttl=60)
@@ -116,3 +123,59 @@ async def update_product(
 ):
 
     return await product_update(product_id, cur_update, db)
+
+@router.patch("/admin/products/{product_id}/toggle-visibility", response_model=ProductResponse)
+async def toggle_product_visibility(
+    product_id: int,
+    admin: User = Depends(req_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(Product).options(selectinload(Product.sizes)).where(Product.product_id == product_id)
+    product = (await db.execute(stmt)).scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    product.is_visible = not product.is_visible
+    await db.commit()
+    
+    product = (await db.execute(stmt)).scalar_one()
+    await invalidate_cache("products:*")
+    await invalidate_cache("product:*")
+    return {
+        "product_id": product.product_id,
+        "name": product.name,
+        "description": product.description,
+        "price": float(product.price),
+        "stock": product.stock,
+        "images": product.images,
+        "is_reserved_for_drop": product.is_reserved_for_drop,
+        "is_visible": product.is_visible,
+        "sizes": [{"id": s.id, "size": s.size, "stock": s.stock} for s in product.sizes]
+    }
+
+@router.patch("/admin/products/{product_id}/toggle-reserved", response_model=ProductResponse)
+async def toggle_product_reserved(
+    product_id: int,
+    admin: User = Depends(req_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    stmt = select(Product).options(selectinload(Product.sizes)).where(Product.product_id == product_id)
+    product = (await db.execute(stmt)).scalar_one_or_none()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    product.is_reserved_for_drop = not product.is_reserved_for_drop
+    await db.commit()
+    
+    product = (await db.execute(stmt)).scalar_one()
+    await invalidate_cache("products:*")
+    await invalidate_cache("product:*")
+    return {
+        "product_id": product.product_id,
+        "name": product.name,
+        "description": product.description,
+        "price": float(product.price),
+        "stock": product.stock,
+        "images": product.images,
+        "is_reserved_for_drop": product.is_reserved_for_drop,
+        "is_visible": product.is_visible,
+        "sizes": [{"id": s.id, "size": s.size, "stock": s.stock} for s in product.sizes]
+    }

@@ -45,6 +45,14 @@ export default function Home() {
     setEmailInput("");
   };
 
+  const [catalogFilter, setCatalogFilter] = useState("all");
+
+  const filteredCatalog = products ? products.filter(p => {
+    if (catalogFilter === "buyable") return !p.is_reserved_for_drop;
+    if (catalogFilter === "reserved") return p.is_reserved_for_drop;
+    return true;
+  }) : [];
+
   return (
     <div style={{ backgroundColor: "var(--bg-main)", color: "var(--text-primary)" }}>
       
@@ -156,6 +164,31 @@ export default function Home() {
             </Link>
           </div>
 
+          {/* Catalog Filter Controls */}
+          <div style={{ display: "flex", gap: "10px", marginBottom: "24px", flexWrap: "wrap" }}>
+            <button 
+              onClick={() => setCatalogFilter("all")} 
+              className={catalogFilter === "all" ? "btn btn-accent" : "btn btn-outline"} 
+              style={{ padding: "8px 16px", fontSize: "12px" }}
+            >
+              ALL RELEASES ({products?.length || 0})
+            </button>
+            <button 
+              onClick={() => setCatalogFilter("buyable")} 
+              className={catalogFilter === "buyable" ? "btn btn-accent" : "btn btn-outline"} 
+              style={{ padding: "8px 16px", fontSize: "12px" }}
+            >
+              AVAILABLE NOW ({products?.filter(p => !p.is_reserved_for_drop).length || 0})
+            </button>
+            <button 
+              onClick={() => setCatalogFilter("reserved")} 
+              className={catalogFilter === "reserved" ? "btn btn-accent" : "btn btn-outline"} 
+              style={{ padding: "8px 16px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "4px" }}
+            >
+              <Flame size={14} /> DROP PREVIEWS ({products?.filter(p => p.is_reserved_for_drop).length || 0})
+            </button>
+          </div>
+
           {isLoading ? (
             <div className="grid-cols-4">
               <ProductCardSkeleton />
@@ -167,13 +200,13 @@ export default function Home() {
             <div style={errorContainerStyle}>
               <p>Failed to retrieve current drops catalog. Check server status.</p>
             </div>
-          ) : products && products.length === 0 ? (
+          ) : filteredCatalog && filteredCatalog.length === 0 ? (
             <div style={emptyContainerStyle}>
-              <p>No products currently available in the catalog.</p>
+              <p>No products match the selected catalog filter.</p>
             </div>
           ) : (
             <div className="grid-cols-4">
-              {products.slice(0, 8).map((product) => (
+              {filteredCatalog.slice(0, 8).map((product) => (
                 <ProductCard key={product.product_id} product={product} />
               ))}
             </div>

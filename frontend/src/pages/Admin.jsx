@@ -11,7 +11,7 @@ import { useState, useContext } from "react";
 import { AuthContext } from "../context/AuthContext";
 import { useToast } from "../components/common/Toast";
 import api from "../services/api";
-import { ShieldCheck, Plus, Trash2, Edit3, Calendar, Eye, EyeOff, Ban, Send, RefreshCw, CheckCircle2, AlertCircle, Check, Pause, Play } from "lucide-react";
+import { ShieldCheck, Plus, Trash2, Edit3, Calendar, Eye, EyeOff, Ban, Send, RefreshCw, CheckCircle2, AlertCircle, Check, Pause, Play, Flame } from "lucide-react";
 
 export default function Admin() {
   const queryClient = useQueryClient();
@@ -37,6 +37,8 @@ export default function Admin() {
     description: "",
     stock: "",
     images: "",
+    is_reserved_for_drop: false,
+    is_visible: true,
   });
 
   // Form States - Drop Create
@@ -50,11 +52,12 @@ export default function Admin() {
 
   // Queries
   const { data: products = [] } = useQuery({
-    queryKey: ["products"],
+    queryKey: ["adminProducts"],
     queryFn: async () => {
-      const res = await api.get("/products");
+      const res = await api.get("/products?include_hidden=true");
       return res.data;
     },
+    enabled: user?.role === "admin",
   });
 
   const { data: drops = [] } = useQuery({
@@ -96,6 +99,7 @@ export default function Admin() {
     onSuccess: () => {
       toast.success("Product created successfully!");
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
       resetProductForm();
     },
     onError: (err) => {
@@ -110,6 +114,7 @@ export default function Admin() {
     onSuccess: () => {
       toast.success("Product updated successfully!");
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
       resetProductForm();
     },
     onError: (err) => {
@@ -124,9 +129,38 @@ export default function Admin() {
     onSuccess: () => {
       toast.success("Product deleted successfully.");
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
     },
     onError: (err) => {
       toast.error(err.response?.data?.detail || "Failed to delete product.");
+    },
+  });
+
+  const toggleProductVisibilityMutation = useMutation({
+    mutationFn: async (id) => {
+      return await api.patch(`/admin/products/${id}/toggle-visibility`);
+    },
+    onSuccess: () => {
+      toast.success("Product visibility updated.");
+      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to update product visibility.");
+    },
+  });
+
+  const toggleProductReservedMutation = useMutation({
+    mutationFn: async (id) => {
+      return await api.patch(`/admin/products/${id}/toggle-reserved`);
+    },
+    onSuccess: () => {
+      toast.success("Product drop reservation updated.");
+      queryClient.invalidateQueries({ queryKey: ["adminProducts"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
+    onError: (err) => {
+      toast.error(err.response?.data?.detail || "Failed to update drop reservation.");
     },
   });
 
@@ -251,7 +285,7 @@ export default function Admin() {
   });
 
   const resetProductForm = () => {
-    setProductForm({ id: "", name: "", price: "", description: "", stock: "", images: "" });
+    setProductForm({ id: "", name: "", price: "", description: "", stock: "", images: "", is_reserved_for_drop: false, is_visible: true });
     setSizes(STANDARD_SIZES.map(s => ({ size: s, stock: 0 })));
   };
 
@@ -264,6 +298,8 @@ export default function Admin() {
       stock: totalStock,
       sizes: sizes,
       images: productForm.images || "",
+      is_reserved_for_drop: productForm.is_reserved_for_drop,
+      is_visible: productForm.is_visible,
     };
 
     if (productForm.id) {
@@ -432,6 +468,8 @@ export default function Admin() {
       description: prod.description || "",
       stock: prod.stock.toString(),
       images: prod.images || "",
+      is_reserved_for_drop: prod.is_reserved_for_drop || false,
+      is_visible: prod.is_visible !== undefined ? prod.is_visible : true,
     });
 
     if (prod.sizes && Array.isArray(prod.sizes) && prod.sizes.length > 0) {
@@ -550,6 +588,31 @@ export default function Admin() {
                 />
               </div>
 
+              {/* Product Visibility & Drop Reservation Switches */}
+              <div style={{ display: "flex", gap: "20px", flexWrap: "wrap", margin: "16px 0", padding: "12px", backgroundColor: "var(--bg-secondary)", borderRadius: "6px", border: "1px solid var(--border-color)" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "700" }}>
+                  <input
+                    type="checkbox"
+                    checked={productForm.is_reserved_for_drop}
+                    onChange={(e) => setProductForm({ ...productForm, is_reserved_for_drop: e.target.checked })}
+                    style={{ width: "16px", height: "16px", accentColor: "var(--accent-red)" }}
+                  />
+                  <Flame size={15} style={{ color: "var(--accent-red)" }} />
+                  Reserved for Drop (Preview only)
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "700" }}>
+                  <input
+                    type="checkbox"
+                    checked={productForm.is_visible}
+                    onChange={(e) => setProductForm({ ...productForm, is_visible: e.target.checked })}
+                    style={{ width: "16px", height: "16px", accentColor: "var(--accent-neon-green)" }}
+                  />
+                  <Eye size={15} style={{ color: "var(--accent-neon-green)" }} />
+                  Visible in Catalog
+                </label>
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Description</label>
                 <textarea
@@ -597,7 +660,19 @@ export default function Admin() {
                       style={listImgStyle} 
                     />
                     <div>
-                      <h4 style={{ fontSize: "14px" }}>{prod.name}</h4>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <h4 style={{ fontSize: "14px", margin: 0 }}>{prod.name}</h4>
+                        {prod.is_reserved_for_drop && (
+                          <span className="badge" style={{ backgroundColor: "#E30613", color: "#FFF", fontSize: "9px", padding: "2px 6px", display: "inline-flex", alignItems: "center", gap: "2px" }}>
+                            <Flame size={10} fill="#FFF" /> RESERVED
+                          </span>
+                        )}
+                        {!prod.is_visible && (
+                          <span className="badge badge-warning" style={{ fontSize: "9px", padding: "2px 6px" }}>
+                            HIDDEN
+                          </span>
+                        )}
+                      </div>
                       <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                         ID #{prod.product_id} &bull; stock: {prod.stock} &bull; ₹{Number(prod.price).toFixed(2)}
                       </span>
@@ -605,6 +680,20 @@ export default function Admin() {
                   </div>
 
                   <div style={{ display: "flex", gap: "8px" }}>
+                    <button 
+                      onClick={() => toggleProductReservedMutation.mutate(prod.product_id)} 
+                      style={{ ...iconBtnStyle, color: prod.is_reserved_for_drop ? "var(--accent-red)" : "var(--text-muted)" }}
+                      title={prod.is_reserved_for_drop ? "Purchasing Disabled (Click to make purchasable)" : "Purchasable (Click to reserve for drop)"}
+                    >
+                      <Flame size={14} fill={prod.is_reserved_for_drop ? "var(--accent-red)" : "none"} />
+                    </button>
+                    <button 
+                      onClick={() => toggleProductVisibilityMutation.mutate(prod.product_id)} 
+                      style={{ ...iconBtnStyle, color: prod.is_visible ? "var(--accent-neon-green)" : "var(--text-muted)" }}
+                      title={prod.is_visible ? "Visible in catalog (Click to hide)" : "Hidden from catalog (Click to show)"}
+                    >
+                      {prod.is_visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                    </button>
                     <button onClick={() => fillProductForm(prod)} style={iconBtnStyle} title="Edit Product">
                       <Edit3 size={14} />
                     </button>

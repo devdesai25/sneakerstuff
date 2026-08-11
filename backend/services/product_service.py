@@ -11,6 +11,8 @@ from backend.models.product_sizes import ProductSize
 from backend.schemas.product import ProductCreate, ProductUpdate, ProductResponse
 from backend.helpers.product_helpers import get_product_or_404
 
+from backend.services.redis_service import invalidate_cache
+
 async def product_add(
     new_product: ProductCreate, 
     admin: User,
@@ -40,7 +42,9 @@ async def product_add(
         price = new_product.price, 
         stock = stock, 
         created_by = admin.id,
-        images = new_product.images
+        images = new_product.images,
+        is_reserved_for_drop = getattr(new_product, 'is_reserved_for_drop', False),
+        is_visible = getattr(new_product, 'is_visible', True)
     ) 
     
     try:
@@ -62,6 +66,9 @@ async def product_add(
         stmt = select(Product).options(selectinload(Product.sizes)).where(Product.product_id == add_prod.product_id)
         result = await db.execute(stmt)
         add_prod = result.scalar_one()
+
+        await invalidate_cache("products:*")
+        await invalidate_cache("product:*")
 
     except IntegrityError:
         await db.rollback()
@@ -97,6 +104,9 @@ async def product_delete(
     try:
         await db.delete(product)
         await db.commit()
+
+        await invalidate_cache("products:*")
+        await invalidate_cache("product:*")
 
     except IntegrityError:
         await db.rollback()
@@ -152,6 +162,9 @@ async def product_update(
         stmt = select(Product).options(selectinload(Product.sizes)).where(Product.product_id == product_id)
         result = await db.execute(stmt)
         product = result.scalar_one()
+
+        await invalidate_cache("products:*")
+        await invalidate_cache("product:*")
     
     except IntegrityError:
         await db.rollback()

@@ -17,6 +17,24 @@ async def cart_add(
     db: AsyncSession
 ) -> CartItem:
     """Add to cart with atomic PostgreSQL Upsert"""
+    product = (
+        await db.execute(
+            select(Product).where(Product.product_id == cur_cart.product_id)
+        )
+    ).scalar_one_or_none()
+
+    if not product:
+        raise HTTPException(
+            status_code=404,
+            detail="Product not found"
+        )
+
+    if product.is_reserved_for_drop:
+        raise HTTPException(
+            status_code=400,
+            detail="This sneaker is reserved for an upcoming drop and cannot be purchased directly"
+        )
+
     product_size = (
         await db.execute(
             select(ProductSize).where(

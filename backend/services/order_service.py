@@ -64,6 +64,12 @@ async def order_create(
                     detail="Product not found"
                 )
 
+            if product.is_reserved_for_drop:
+                raise HTTPException(
+                    status_code=400,
+                    detail="This sneaker is reserved for an upcoming drop and cannot be ordered directly"
+                )
+
             if product.stock < cart_item.quantity:
                 raise HTTPException(
                     status_code=422,

@@ -136,10 +136,21 @@ async def toggle_product_visibility(
         raise HTTPException(status_code=404, detail="Product not found")
     product.is_visible = not product.is_visible
     await db.commit()
-    await db.refresh(product)
+    
+    product = (await db.execute(stmt)).scalar_one()
     await invalidate_cache("products:*")
     await invalidate_cache("product:*")
-    return product
+    return {
+        "product_id": product.product_id,
+        "name": product.name,
+        "description": product.description,
+        "price": float(product.price),
+        "stock": product.stock,
+        "images": product.images,
+        "is_reserved_for_drop": product.is_reserved_for_drop,
+        "is_visible": product.is_visible,
+        "sizes": [{"id": s.id, "size": s.size, "stock": s.stock} for s in product.sizes]
+    }
 
 @router.patch("/admin/products/{product_id}/toggle-reserved", response_model=ProductResponse)
 async def toggle_product_reserved(
@@ -153,7 +164,18 @@ async def toggle_product_reserved(
         raise HTTPException(status_code=404, detail="Product not found")
     product.is_reserved_for_drop = not product.is_reserved_for_drop
     await db.commit()
-    await db.refresh(product)
+    
+    product = (await db.execute(stmt)).scalar_one()
     await invalidate_cache("products:*")
     await invalidate_cache("product:*")
-    return product
+    return {
+        "product_id": product.product_id,
+        "name": product.name,
+        "description": product.description,
+        "price": float(product.price),
+        "stock": product.stock,
+        "images": product.images,
+        "is_reserved_for_drop": product.is_reserved_for_drop,
+        "is_visible": product.is_visible,
+        "sizes": [{"id": s.id, "size": s.size, "stock": s.stock} for s in product.sizes]
+    }

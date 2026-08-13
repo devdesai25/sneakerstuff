@@ -38,4 +38,8 @@ PUBLISHABLE_STATES = frozenset({
     DropStatus.DRAFT,
 })
 
-DELETABLE_STATES = frozenset(DropStatus)
+DELETABLE_STATES = frozenset({
+    DropStatus.DRAFT,
+    DropStatus.COMPLETED,
+    DropStatus.CANCELLED,
+})

@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, patch
 
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
 from fastapi import HTTPException
 from datetime import datetime, timezone, timedelta
 
@@ -476,7 +477,7 @@ async def test_drop_cancel_invalid_state(db, product):
     drop = await create_drop(
         db,
         product,
-        status=DropStatus.CLAIMING
+        status=DropStatus.COMPLETED
     )
 
     with pytest.raises(HTTPException) as exc:

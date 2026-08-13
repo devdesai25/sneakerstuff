@@ -6,11 +6,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
+from backend.enums.drop_status import DropStatus
 from backend.enums.order_status import OrderStatus
 from backend.models.cart_items import CartItem
+from backend.models.drops import Drop
+from backend.models.entry import Entry
 from backend.models.order import Order
 from backend.models.order_items import OrderItem
 from backend.models.products import Product
+from backend.models.reservations import Reservation
 from backend.schemas.orders import OrderRequest
 from backend.services.order_service import (
     order_get,
@@ -18,6 +22,7 @@ from backend.services.order_service import (
     order_pay,
     order_cancel,
 )
+from backend.tests.factories import create_product
 
 
 @pytest.mark.asyncio
@@ -114,7 +119,6 @@ async def test_order_create_cart_not_found_raises_404(db, user):
 
 @pytest.mark.asyncio
 async def test_order_create_product_not_found_raises_404(db, user):
-    from backend.tests.factories import create_product
     prod = await create_product(db)
     cart_item = CartItem(
         user_id=user.id,
@@ -379,11 +383,6 @@ async def test_order_pay_already_expired_raises_400(db, user):
 
 @pytest.mark.asyncio
 async def test_order_pay_expired_raffle_order_raises_422_not_resurrected(db, user, product):
-    from backend.models.entry import Entry
-    from backend.models.reservations import Reservation
-    from backend.models.drops import Drop
-    from backend.enums.drop_status import DropStatus
-
     drop = Drop(
         product_id=product.product_id,
         opens_at=datetime.now(timezone.utc) - timedelta(hours=2),

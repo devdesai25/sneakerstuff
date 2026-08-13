@@ -1,45 +1,42 @@
-#import redis
-import random
 import asyncio
-from fastapi import HTTPException
-from sqlalchemy import select, exists
-from sqlalchemy.orm import selectinload
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
+import random
 
-from backend.celery_app import celery_app, CelerySessionLocal
-from backend.models.entry import Entry
-from backend.models.reservations import Reservation
-from backend.models.order import Order
-from backend.models.products import Product
-from backend.models.drops import Drop
-from backend.models.order_items import OrderItem
+from sqlalchemy import exists, select
+from sqlalchemy.orm import selectinload
+
+from backend.celery_app import CelerySessionLocal, celery_app
 from backend.enums.drop_status import DropStatus
 from backend.enums.order_status import OrderStatus
-from backend.helpers.drop_helpers import get_drop_or_404, get_entries_or_404
+from backend.helpers.drop_helpers import get_drop_or_404
+from backend.models.drops import Drop
+from backend.models.entry import Entry
+from backend.models.order import Order
+from backend.models.order_items import OrderItem
+from backend.models.products import Product
+from backend.models.reservations import Reservation
 
-#r = redis.Redis(host="localhost", port=6379, db=2)
-async def _activate_drop(self, drop_id):
 
+async def _activate_drop(self, drop_id: int):
     async with CelerySessionLocal() as db: 
-
         try:
             drop = await get_drop_or_404(drop_id, db)
             drop.status = DropStatus.ENTRY_OPEN
             await db.commit()
-
         except Exception as exc:
             await db.rollback()
             raise self.retry(exc=exc, countdown=10)
-        
         finally:
             await db.close()
+
 
 @celery_app.task(bind=True, max_retries=3)
 def activate_drop(self, drop_id: int):
     return asyncio.run(_activate_drop(self, drop_id))    
-async def _close_drop(self, drop_id):
-    async with CelerySessionLocal() as db: 
 
+
+async def _close_drop(self, drop_id: int):
+    async with CelerySessionLocal() as db: 
         try:    
             drop = await get_drop_or_404(drop_id, db)
             drop.status = DropStatus.ENTRY_CLOSED
@@ -68,13 +65,14 @@ async def _close_drop(self, drop_id):
         finally:
             await db.close()
 
+
 @celery_app.task(bind=True, max_retries=3)
-def close_drop(self, drop_id:int):
+def close_drop(self, drop_id: int):
     return asyncio.run(_close_drop(self, drop_id))
 
-async def _select_winners(self, drop_id):
-    async with CelerySessionLocal() as db: 
 
+async def _select_winners(self, drop_id: int):
+    async with CelerySessionLocal() as db: 
         try:
             drop = (
                 await db.execute(
@@ -119,43 +117,56 @@ async def _select_winners(self, drop_id):
             
             expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
+            # Batch create orders
+            orders_to_create = []
             for winner in winners:
                 order = Order(
-                    user_id = winner.user_id,
-                    total_amount = drop.product_price,
-                    status = OrderStatus.PENDING,
-                    expires_at = expires_at,
-                    address = winner.address
+                    user_id=winner.user_id,
+                    total_amount=drop.product_price,
+                    status=OrderStatus.PENDING,
+                    expires_at=expires_at,
+                    address=winner.address
                 )
                 db.add(order)
-                await db.flush()
-
-                order_item = OrderItem(
-                    order_id = order.order_id,
-                    product_id = drop.product_id,
-                    quantity = 1,
-                    unit_price = drop.product_price,
-                    subtotal = drop.product_price,
-                    size = winner.size
-                )
-                db.add(order_item)
+                orders_to_create.append((winner, order))
                 drop.drop_inventory -= 1
 
+            # Single batch flush for all orders to generate order_ids
+            await db.flush()
+
+            # Batch create order items and reservations
+            reservations_to_schedule = []
+            for winner, order in orders_to_create:
+                order_item = OrderItem(
+                    order_id=order.order_id,
+                    product_id=drop.product_id,
+                    quantity=1,
+                    unit_price=drop.product_price,
+                    subtotal=drop.product_price,
+                    size=winner.size
+                )
+                db.add(order_item)
+
                 reservation = Reservation(
-                    entry_id = winner.entry_id,
-                    order_id = order.order_id
+                    entry_id=winner.entry_id,
+                    order_id=order.order_id
                 )
                 db.add(reservation)
-                await db.flush()
+                reservations_to_schedule.append((reservation, order.expires_at))
 
+            # Single batch flush for items and reservations
+            await db.flush()
+
+            for reservation, exp_eta in reservations_to_schedule:
                 expire_unpaid_reservations.apply_async(
-                    args=[reservation.reservation_id], eta=order.expires_at)
+                    args=[reservation.reservation_id],
+                    eta=exp_eta
+                )
                         
             drop.status = DropStatus.CLAIMING
             await _check_and_complete_drop(drop, db)
             
             await db.commit()
-            #await db.refresh(winners)
             
         except Exception as exc:
             await db.rollback()
@@ -164,12 +175,12 @@ async def _select_winners(self, drop_id):
         finally:
             await db.close()
 
+
 async def _check_and_complete_drop(drop: Drop, db):
     """
     Checks if all entries for the drop have been processed and no active pending reservations remain.
     Only runs if drop status is CLAIMING, ENTRY_CLOSED, or SELECTING.
     """
-    from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
 
     # NEVER complete a drop that is still DRAFT, PAUSED, CANCELLED, or COMPLETED
@@ -223,11 +234,13 @@ async def _check_and_complete_drop(drop: Drop, db):
         drop.status = DropStatus.COMPLETED
         await db.flush()
 
+
 @celery_app.task(bind=True, max_retries=3)
 def select_winners(self, drop_id: int):
     return asyncio.run(_select_winners(self, drop_id))
 
-async def _expire_unpaid_reservations(self, reservation_id):
+
+async def _expire_unpaid_reservations(self, reservation_id: int):
     async with CelerySessionLocal() as db: 
         try:
             # Query the reservation, preloading the order and the entry's drop details
@@ -286,28 +299,28 @@ async def _expire_unpaid_reservations(self, reservation_id):
                 expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
                 new_order = Order(
-                    user_id = new_winner.user_id,
-                    total_amount = drop.product_price,
-                    status = OrderStatus.PENDING,
-                    expires_at = expires_at,
-                    address = new_winner.address
+                    user_id=new_winner.user_id,
+                    total_amount=drop.product_price,
+                    status=OrderStatus.PENDING,
+                    expires_at=expires_at,
+                    address=new_winner.address
                 )
                 db.add(new_order)
                 await db.flush()
 
                 new_order_item = OrderItem(
-                    order_id = new_order.order_id,
-                    product_id = drop.product_id,
-                    quantity = 1,
-                    unit_price = drop.product_price,
-                    subtotal = drop.product_price,
-                    size = new_winner.size
+                    order_id=new_order.order_id,
+                    product_id=drop.product_id,
+                    quantity=1,
+                    unit_price=drop.product_price,
+                    subtotal=drop.product_price,
+                    size=new_winner.size
                 )
                 db.add(new_order_item)
 
                 new_reservation = Reservation(
-                    entry_id = new_winner.entry_id,
-                    order_id = new_order.order_id
+                    entry_id=new_winner.entry_id,
+                    order_id=new_order.order_id
                 )
                 db.add(new_reservation)
                 await db.flush()
@@ -330,6 +343,7 @@ async def _expire_unpaid_reservations(self, reservation_id):
         finally:
             await db.close()
 
+
 @celery_app.task(bind=True, max_retries=3)
-def expire_unpaid_reservations(self, reservation_id):   
+def expire_unpaid_reservations(self, reservation_id: int):   
     return asyncio.run(_expire_unpaid_reservations(self, reservation_id))

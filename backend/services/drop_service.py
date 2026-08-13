@@ -1,22 +1,43 @@
+from datetime import datetime, timedelta, timezone
+import random
+
 from fastapi import HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from backend.models.drops import Drop
-from backend.models.products import Product
-from backend.schemas.drops import DropCreate, DropUpdate
-from backend.enums.drop_status import DropStatus, DELETABLE_STATES, STOCK_RESERVED_STATES, CANCELLABLE_STATES, PUBLISHABLE_STATES, UPDATABLE_STATES
-from backend.tasks.drop_tasks import activate_drop, close_drop
-from backend.helpers.drop_helpers import get_drop_or_404, drop_get
+from backend.enums.drop_status import (
+    CANCELLABLE_STATES,
+    DELETABLE_STATES,
+    PUBLISHABLE_STATES,
+    STOCK_RESERVED_STATES,
+    UPDATABLE_STATES,
+    DropStatus,
+)
+from backend.enums.order_status import OrderStatus
+from backend.helpers.drop_helpers import drop_get, get_drop_or_404
 from backend.helpers.product_helpers import get_product_or_404
+from backend.models.drops import Drop
+from backend.models.entry import Entry
+from backend.models.order import Order
+from backend.models.order_items import OrderItem
+from backend.models.products import Product
+from backend.models.reservations import Reservation
+from backend.schemas.drops import DropCreate, DropUpdate
+from backend.services.websocket_manager import manager
+from backend.tasks.drop_tasks import (
+    _check_and_complete_drop,
+    activate_drop,
+    close_drop,
+    expire_unpaid_reservations,
+)
+
 
 async def drop_create(
     drop_data: DropCreate, 
     db: AsyncSession
 ) -> Drop:
-
     product = (
         await db.execute(
             select(Product).where(Product.product_id == drop_data.product_id)
@@ -43,15 +64,15 @@ async def drop_create(
     
     try:
         new_drop = Drop(
-            product_id = drop_data.product_id,
-            opens_at = drop_data.opens_at,
-            closes_at = drop_data.closes_at,
-            drop_inventory = drop_data.drop_inventory,
-            product_name = product.name,
-            product_price = product.price,
-            product_image = product.images,
-            status = DropStatus.DRAFT,
-            is_visible = drop_data.is_visible
+            product_id=drop_data.product_id,
+            opens_at=drop_data.opens_at,
+            closes_at=drop_data.closes_at,
+            drop_inventory=drop_data.drop_inventory,
+            product_name=product.name,
+            product_price=product.price,
+            product_image=product.images,
+            status=DropStatus.DRAFT,
+            is_visible=drop_data.is_visible
         )
 
         db.add(new_drop)
@@ -64,25 +85,24 @@ async def drop_create(
             status_code=409,
             detail="Database Integrity Error"
         )
-    
     except Exception:
         await db.rollback()
         raise
 
     return new_drop
 
+
 async def drop_update(
     drop_id: int, 
     drop_data: DropUpdate, 
     db: AsyncSession
-)-> Drop:
-
+) -> Drop:
     drop = await get_drop_or_404(drop_id, db)
     
     if drop.status not in UPDATABLE_STATES:
         raise HTTPException(
-            status_code = 400,
-            detail = "Invalid state transition"
+            status_code=400,
+            detail="Invalid state transition"
         )
     
     product = await get_product_or_404(drop.product_id, db)
@@ -91,7 +111,7 @@ async def drop_update(
         update_data = drop_data.model_dump(exclude_unset=True)
 
         for key, value in update_data.items():
-                setattr(drop, key, value)
+            setattr(drop, key, value)
 
         if product.stock < drop.drop_inventory:
             raise HTTPException(
@@ -114,12 +134,12 @@ async def drop_update(
             status_code=409,
             detail="Database integrity error"
         )
-    
     except Exception:
         await db.rollback()
         raise
 
     return drop
+
 
 async def drop_delete(
     drop_id: int, 
@@ -134,13 +154,6 @@ async def drop_delete(
         )
     
     try:
-        from backend.models.entry import Entry
-        from backend.models.reservations import Reservation
-        from backend.models.order import Order
-        from backend.models.order_items import OrderItem
-        from backend.models.products import Product
-        from backend.enums.order_status import OrderStatus
-
         # Find all entries for this drop
         entries_stmt = select(Entry).where(Entry.drop_id == drop.drop_id)
         entries = (await db.execute(entries_stmt)).scalars().all()
@@ -158,38 +171,33 @@ async def drop_delete(
                 restored_stock = drop.drop_inventory
 
                 if entry_ids:
-                    res_stmt = select(Reservation).where(Reservation.entry_id.in_(entry_ids))
+                    res_stmt = (
+                        select(Reservation)
+                        .where(Reservation.entry_id.in_(entry_ids))
+                        .options(selectinload(Reservation.order).selectinload(Order.order_items))
+                    )
                     reservations = (await db.execute(res_stmt)).scalars().all()
-                    order_ids = [r.order_id for r in reservations if r.order_id]
 
-                    if order_ids:
-                        orders_stmt = select(Order).where(Order.order_id.in_(order_ids), Order.status == OrderStatus.PENDING).options(selectinload(Order.order_items))
-                        pending_orders = (await db.execute(orders_stmt)).scalars().all()
-
-                        for p_order in pending_orders:
-                            qty = sum(item.quantity for item in p_order.order_items) if p_order.order_items else 1
+                    for res in reservations:
+                        if res.order and res.order.status == OrderStatus.PENDING:
+                            qty = sum(item.quantity for item in res.order.order_items) if res.order.order_items else 1
                             restored_stock += qty
 
                 product.stock += restored_stock
 
         # Delete associated records in strict foreign key dependency order
         if entry_ids:
-            res_stmt = select(Reservation).where(Reservation.entry_id.in_(entry_ids))
+            res_stmt = (
+                select(Reservation)
+                .where(Reservation.entry_id.in_(entry_ids))
+                .options(selectinload(Reservation.order).selectinload(Order.order_items))
+            )
             reservations = (await db.execute(res_stmt)).scalars().all()
             for res in reservations:
-                if res.order_id:
-                    pending_order = (
-                        await db.execute(
-                            select(Order)
-                            .where(Order.order_id == res.order_id, Order.status == OrderStatus.PENDING)
-                            .options(selectinload(Order.order_items))
-                        )
-                    ).scalar_one_or_none()
-
-                    if pending_order:
-                        for item in pending_order.order_items:
-                            await db.delete(item)
-                        await db.delete(pending_order)
+                if res.order and res.order.status == OrderStatus.PENDING:
+                    for item in res.order.order_items:
+                        await db.delete(item)
+                    await db.delete(res.order)
 
                 await db.delete(res)
 
@@ -209,18 +217,17 @@ async def drop_delete(
             status_code=409,
             detail="Database integrity error"
         )
-    
     except Exception:
         await db.rollback()
         raise
     
     return {"message": "Drop deleted successfully and reserved stock restored."}
 
+
 async def drop_cancel(
     drop_id: int, 
     db: AsyncSession
 ) -> Drop:
-    
     drop = await get_drop_or_404(drop_id, db)
 
     if drop.status not in CANCELLABLE_STATES:
@@ -230,16 +237,9 @@ async def drop_cancel(
         )
     
     try:
-        from backend.models.entry import Entry
-        from backend.models.reservations import Reservation
-        from backend.models.order import Order
-        from backend.models.products import Product
-        from backend.enums.order_status import OrderStatus
-
-        # restore stock only if it was actually reserved
+        # Restore stock only if it was actually reserved
         if drop.status in STOCK_RESERVED_STATES:
             product = await get_product_or_404(drop.product_id, db)
-
             restored_stock = drop.drop_inventory
 
             # Find all entries for this drop
@@ -248,18 +248,18 @@ async def drop_cancel(
             entry_ids = [e.entry_id for e in entries]
 
             if entry_ids:
-                res_stmt = select(Reservation).where(Reservation.entry_id.in_(entry_ids))
+                res_stmt = (
+                    select(Reservation)
+                    .where(Reservation.entry_id.in_(entry_ids))
+                    .options(selectinload(Reservation.order).selectinload(Order.order_items))
+                )
                 reservations = (await db.execute(res_stmt)).scalars().all()
-                order_ids = [r.order_id for r in reservations if r.order_id]
 
-                if order_ids:
-                    orders_stmt = select(Order).where(Order.order_id.in_(order_ids), Order.status == OrderStatus.PENDING).options(selectinload(Order.order_items))
-                    pending_orders = (await db.execute(orders_stmt)).scalars().all()
-
-                    for p_order in pending_orders:
-                        qty = sum(item.quantity for item in p_order.order_items) if p_order.order_items else 1
+                for res in reservations:
+                    if res.order and res.order.status == OrderStatus.PENDING:
+                        qty = sum(item.quantity for item in res.order.order_items) if res.order.order_items else 1
                         restored_stock += qty
-                        p_order.status = OrderStatus.CANCELLED
+                        res.order.status = OrderStatus.CANCELLED
 
             product.stock += restored_stock
             drop.drop_inventory = 0
@@ -275,18 +275,17 @@ async def drop_cancel(
             status_code=409,
             detail="Database integrity error"
         )
-    
     except Exception:
         await db.rollback()
         raise
 
     return drop
 
+
 async def drop_publish(
     drop_id: int, 
     db: AsyncSession
 ) -> Drop:
-    
     drop = await get_drop_or_404(drop_id, db)
 
     product = (
@@ -302,7 +301,7 @@ async def drop_publish(
             detail="Invalid state transition"   
         )
 
-    if drop.drop_inventory <= 0 :
+    if drop.drop_inventory <= 0:
         raise HTTPException(
             status_code=422,
             detail="Drop inventory cannot be zero or less than zero"
@@ -351,6 +350,7 @@ async def drop_publish(
     
     return drop
 
+
 async def drop_pause(
     drop_id: int,
     db: AsyncSession
@@ -373,6 +373,7 @@ async def drop_pause(
 
     return drop
 
+
 async def drop_resume(
     drop_id: int,
     db: AsyncSession
@@ -386,7 +387,6 @@ async def drop_resume(
         )
 
     try:
-        from datetime import datetime, timezone
         now = datetime.now(timezone.utc)
         if drop.opens_at <= now < drop.closes_at:
             drop.status = DropStatus.ENTRY_OPEN
@@ -403,20 +403,12 @@ async def drop_resume(
 
     return drop
 
+
 async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
     """
     Synchronously executes winner selection and state progression for a closed drop.
-    Does not crash if 0 entries exist.
+    Batches order and reservation creation to eliminate round-trip flushes.
     """
-    from datetime import datetime, timezone, timedelta
-    from backend.models.entry import Entry
-    from backend.models.order import Order
-    from backend.models.order_items import OrderItem
-    from backend.models.reservations import Reservation
-    from backend.enums.order_status import OrderStatus
-    from backend.tasks.drop_tasks import expire_unpaid_reservations, _check_and_complete_drop
-    import random
-
     if drop.status in (DropStatus.COMPLETED, DropStatus.CANCELLED):
         return drop
 
@@ -433,7 +425,6 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
 
     if not entries:
         if drop.drop_inventory > 0:
-            from backend.models.products import Product
             product = (await db.execute(select(Product).where(Product.product_id == drop.product_id))).scalar_one_or_none()
             if product:
                 product.stock += drop.drop_inventory
@@ -463,6 +454,8 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
 
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
+        # Batch create orders
+        orders_to_create = []
         for winner in winners:
             order = Order(
                 user_id=winner.user_id,
@@ -472,8 +465,15 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
                 address=winner.address
             )
             db.add(order)
-            await db.flush()
+            orders_to_create.append((winner, order))
+            drop.drop_inventory -= 1
 
+        # Single batch flush for all orders
+        await db.flush()
+
+        # Batch create order items and reservations
+        reservations_to_schedule = []
+        for winner, order in orders_to_create:
             order_item = OrderItem(
                 order_id=order.order_id,
                 product_id=drop.product_id,
@@ -483,18 +483,21 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
                 size=winner.size
             )
             db.add(order_item)
-            drop.drop_inventory -= 1
 
             reservation = Reservation(
                 entry_id=winner.entry_id,
                 order_id=order.order_id
             )
             db.add(reservation)
-            await db.flush()
+            reservations_to_schedule.append((reservation, order.expires_at))
 
+        # Single batch flush for items and reservations
+        await db.flush()
+
+        for reservation, exp_eta in reservations_to_schedule:
             expire_unpaid_reservations.apply_async(
                 args=[reservation.reservation_id],
-                eta=order.expires_at
+                eta=exp_eta
             )
 
         drop.status = DropStatus.CLAIMING
@@ -505,7 +508,6 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
     await db.refresh(drop)
 
     try:
-        from backend.services.websocket_manager import manager
         await manager.broadcast_to_drop(drop.drop_id, {
             "event": "drop_status_updated",
             "drop_id": drop.drop_id,
@@ -516,7 +518,7 @@ async def execute_drop_draw(drop: Drop, db: AsyncSession) -> Drop:
 
     return drop
 
+
 async def drop_draw(drop_id: int, db: AsyncSession) -> Drop:
     drop = await get_drop_or_404(drop_id, db)
     return await execute_drop_draw(drop, db)
-

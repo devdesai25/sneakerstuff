@@ -1,14 +1,14 @@
+from datetime import datetime, timezone
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.enums.drop_status import DropStatus
 from backend.models.drops import Drop
 from backend.models.entry import Entry
 
-async def drop_get(db: AsyncSession) -> list[Drop]:
-    from datetime import datetime, timezone
-    from backend.enums.drop_status import DropStatus
 
+async def drop_get(db: AsyncSession) -> list[Drop]:
     drops = (
         await db.execute(
             select(Drop)
@@ -27,8 +27,8 @@ async def drop_get(db: AsyncSession) -> list[Drop]:
     
     return drops
 
+
 async def get_drop_or_404(drop_id: int, db: AsyncSession) -> Drop:
-    
     drop = (
         await db.execute(
             select(Drop).where(Drop.drop_id == drop_id)
@@ -43,8 +43,8 @@ async def get_drop_or_404(drop_id: int, db: AsyncSession) -> Drop:
 
     return drop
 
-async def get_entries_or_404(drop_id: int, db: AsyncSession) -> list[Entry]:
 
+async def get_entries_or_404(drop_id: int, db: AsyncSession) -> list[Entry]:
     entries = (
         await db.execute(
             select(Entry)

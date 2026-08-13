@@ -5,10 +5,12 @@ from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from datetime import datetime, timezone, timedelta
 
-from backend.services.drop_service import drop_create, drop_update, drop_publish, drop_cancel, drop_delete
+from backend.services.drop_service import drop_create, drop_update, drop_publish, drop_cancel, drop_delete, execute_drop_draw
 from backend.helpers.drop_helpers import get_drop_or_404
 from backend.schemas.drops import DropCreate, DropUpdate
 from backend.enums.drop_status import DropStatus
+from backend.models.entry import Entry
+from backend.models.reservations import Reservation
 
 from backend.tests.factories import create_product, create_drop
 
@@ -597,11 +599,6 @@ async def test_drop_delete_integrity_error(db, product):
 
 @pytest.mark.asyncio
 async def test_execute_drop_draw_10_min_window_and_concurrency(db, product, user):
-    from backend.services.drop_service import execute_drop_draw
-    from backend.models.entry import Entry
-    from backend.models.reservations import Reservation
-    from datetime import datetime, timezone, timedelta
-
     drop = await create_drop(
         db,
         product,

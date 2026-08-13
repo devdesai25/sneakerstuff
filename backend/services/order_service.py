@@ -1,36 +1,39 @@
-from fastapi import HTTPException
-from sqlalchemy import select, exists
-from sqlalchemy.orm import selectinload
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, timezone
 
-from backend.models.users import User
-from backend.models.cart_items import CartItem
-from backend.models.order import Order
-from backend.models.order_items import OrderItem
-from backend.models.products import Product
-from backend.models.product_sizes import ProductSize
-from backend.schemas.orders import OrderResponse, OrderRequest
+from fastapi import HTTPException
+from sqlalchemy import exists, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from backend.enums.order_status import OrderStatus
 from backend.helpers.order_helpers import get_order_one_or_404, get_orders_all_or_404, restore_stock
-from backend.tasks.drop_tasks import expire_unpaid_reservations
+from backend.models.cart_items import CartItem
+from backend.models.drops import Drop
+from backend.models.entry import Entry
+from backend.models.order import Order
+from backend.models.order_items import OrderItem
+from backend.models.product_sizes import ProductSize
+from backend.models.products import Product
+from backend.models.reservations import Reservation
+from backend.models.users import User
+from backend.schemas.orders import OrderRequest, OrderResponse
+from backend.tasks.drop_tasks import _check_and_complete_drop, expire_unpaid_reservations
+
 
 async def order_get(
     user: User, 
     db: AsyncSession
-) -> OrderResponse:
-
+) -> list[Order]:
     orders = await get_orders_all_or_404(user, db)
-
     return orders
+
 
 async def order_create(
     address: OrderRequest, 
     user: User, 
     db: AsyncSession
-) -> OrderResponse:
-
+) -> Order:
     cart = (
         await db.execute(
             select(CartItem).where(CartItem.user_id == user.id)
@@ -44,20 +47,20 @@ async def order_create(
         )
 
     try:
+        # Batch fetch all products in cart with pessimistic lock in 1 query
+        product_ids = list({cart_item.product_id for cart_item in cart})
+        products_stmt = (
+            select(Product)
+            .where(Product.product_id.in_(product_ids))
+            .with_for_update()
+        )
+        products = (await db.execute(products_stmt)).scalars().all()
+        product_map = {p.product_id: p for p in products}
 
         total_amount = 0
-        products = {}
 
         for cart_item in cart:
-
-            product = (
-                await db.execute(
-                    select(Product)
-                    .where(Product.product_id == cart_item.product_id)
-                    .with_for_update()
-                )
-            ).scalar_one_or_none()
-            
+            product = product_map.get(cart_item.product_id)
             if not product:
                 raise HTTPException(
                     status_code=404,
@@ -77,11 +80,8 @@ async def order_create(
                 )
 
             subtotal = product.price * cart_item.quantity
-
             total_amount += subtotal
             product.stock -= cart_item.quantity
-
-            products[cart_item.product_id] = product
 
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
 
@@ -97,9 +97,7 @@ async def order_create(
         await db.flush()
 
         for cart_item in cart:
-
-            product = products[cart_item.product_id]
-
+            product = product_map[cart_item.product_id]
             subtotal = cart_item.quantity * product.price
 
             order_item = OrderItem(
@@ -110,23 +108,20 @@ async def order_create(
                 subtotal=subtotal,
                 size=cart_item.size
             )
-
             db.add(order_item)
 
         await db.commit()
         await db.refresh(new_order)
 
         stmt = (
-        select(Order)
+            select(Order)
             .where(Order.order_id == new_order.order_id)
             .options(
                 selectinload(Order.order_items),
                 selectinload(Order.user),
             )
         )
-
-        result = await db.execute(stmt)
-        new_order = result.scalar_one()
+        new_order = (await db.execute(stmt)).scalar_one()
 
     except HTTPException:
         await db.rollback()
@@ -145,15 +140,14 @@ async def order_create(
 
     return new_order
 
+
 async def order_pay(
     order_id: int, 
     user: User, 
     db: AsyncSession
-) -> OrderResponse:
-
+) -> Order:
     order = await get_order_one_or_404(order_id, user, db)
 
-    from backend.models.reservations import Reservation
     reservation = (
         await db.execute(
             select(Reservation)
@@ -177,8 +171,6 @@ async def order_pay(
         if not reservation:
             await restore_stock(order, db)
         else:
-            from backend.models.drops import Drop
-            from backend.tasks.drop_tasks import _check_and_complete_drop
             if reservation.entry:
                 drop = (
                     await db.execute(
@@ -201,23 +193,24 @@ async def order_pay(
         order.status = OrderStatus.PAID
         order.paid_at = now
 
-        for item in order.order_items:
-            if item.size:
-                p_size = (
-                    await db.execute(
-                        select(ProductSize).where(
-                            ProductSize.product_id == item.product_id,
-                            ProductSize.size == item.size
-                        ).with_for_update()
-                    )
-                ).scalar_one_or_none()
+        # Batch query ProductSize records for sized items
+        sized_items = [item for item in (order.order_items or []) if item.size]
+        if sized_items:
+            sized_product_ids = list({item.product_id for item in sized_items})
+            p_sizes_stmt = (
+                select(ProductSize)
+                .where(ProductSize.product_id.in_(sized_product_ids))
+                .with_for_update()
+            )
+            p_sizes = (await db.execute(p_sizes_stmt)).scalars().all()
+            size_map = {(s.product_id, s.size): s for s in p_sizes}
+
+            for item in sized_items:
+                p_size = size_map.get((item.product_id, item.size))
                 if p_size and p_size.stock > 0:
                     p_size.stock = max(0, p_size.stock - item.quantity)
 
-        # Check if this order is linked to a drop reservation and auto-complete the drop if all entries/reservations are settled
-        from backend.models.drops import Drop
-        from backend.tasks.drop_tasks import _check_and_complete_drop
-
+        # Check if this order is linked to a drop reservation and auto-complete drop if settled
         if reservation and reservation.entry:
             drop = (
                 await db.execute(
@@ -228,7 +221,17 @@ async def order_pay(
                 await _check_and_complete_drop(drop, db)
 
         await db.commit()
-        await db.refresh(order)
+        
+        stmt = (
+            select(Order)
+            .where(Order.order_id == order.order_id)
+            .options(
+                selectinload(Order.order_items),
+                selectinload(Order.user),
+                selectinload(Order.reservation),
+            )
+        )
+        order = (await db.execute(stmt)).scalar_one()
 
     except IntegrityError:
         await db.rollback()
@@ -243,17 +246,20 @@ async def order_pay(
 
     return order
 
+
 async def order_cancel(
     order_id: int, 
     user: User, 
     db: AsyncSession
-) -> OrderResponse:
-
+) -> Order:
     order = (
         await db.execute(
             select(Order)
             .where(Order.order_id == order_id, Order.user_id == user.id)
-            .options(selectinload(Order.reservation))
+            .options(
+                selectinload(Order.order_items),
+                selectinload(Order.reservation)
+            )
         )
     ).scalar_one_or_none() 
 
@@ -301,11 +307,6 @@ async def order_cancel(
         order.status = OrderStatus.CANCELLED
 
         if is_raffle_order and order.reservation:
-            from backend.models.entry import Entry
-            from backend.models.reservations import Reservation
-            from backend.models.drops import Drop
-            from backend.tasks.drop_tasks import _check_and_complete_drop
-
             res_entry_id = order.reservation.entry_id
 
             entry = (
@@ -368,7 +369,17 @@ async def order_cancel(
                         await _check_and_complete_drop(drop, db)
 
         await db.commit()
-        await db.refresh(order)
+        
+        stmt = (
+            select(Order)
+            .where(Order.order_id == order.order_id)
+            .options(
+                selectinload(Order.order_items),
+                selectinload(Order.user),
+                selectinload(Order.reservation),
+            )
+        )
+        order = (await db.execute(stmt)).scalar_one()
 
     except IntegrityError:
         await db.rollback()

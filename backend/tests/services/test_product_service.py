@@ -1,13 +1,16 @@
-import pytest
-from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from backend.services.product_service import product_add, product_delete, product_update
-from backend.schemas.product import ProductCreate, ProductUpdate
+from fastapi import HTTPException
+import pytest
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.models.products import Product
 from backend.models.users import User
+from backend.schemas.product import ProductCreate, ProductUpdate
+from backend.services.product_service import product_add, product_delete, product_update
+
 
 @pytest.mark.asyncio
 async def test_product_add_success(db: AsyncSession, admin_user: User):
@@ -30,20 +33,21 @@ async def test_product_add_success(db: AsyncSession, admin_user: User):
         await db.execute(select(Product).where(Product.name == "Test Product 1"))
     ).scalar_one_or_none()
     assert db_product is not None
+    assert db_product.stock == 50
 
 @pytest.mark.asyncio
 async def test_product_add_duplicate(db: AsyncSession, admin_user: User, product: Product):
-    """Test product creation with duplicate name."""
-    new_product = ProductCreate(
+    """Test adding duplicate product name."""
+    duplicate_product = ProductCreate(
         name=product.name,
-        description="Another description",
-        price=150.0,
+        description="Duplicate",
+        price=50.0,
         stock=10,
         images="http://example.com/img2.png"
     )
     
     with pytest.raises(HTTPException) as exc_info:
-        await product_add(new_product=new_product, admin=admin_user, db=db)
+        await product_add(new_product=duplicate_product, admin=admin_user, db=db)
         
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == "Duplicate Value Inserted"
@@ -60,7 +64,6 @@ async def test_product_add_integrity_error(db: AsyncSession, admin_user: User):
     )
     
     with patch("sqlalchemy.ext.asyncio.AsyncSession.commit") as mock_commit:
-        from sqlalchemy.exc import IntegrityError
         mock_commit.side_effect = IntegrityError(None, None, Exception())
         
         with pytest.raises(HTTPException) as exc_info:
@@ -105,7 +108,6 @@ async def test_product_delete_used_in_drop(db: AsyncSession, product: Product, d
 async def test_product_delete_integrity_error(db: AsyncSession, product: Product):
     """Test product deletion when DB integrity error occurs."""
     with patch("sqlalchemy.ext.asyncio.AsyncSession.commit") as mock_commit:
-        from sqlalchemy.exc import IntegrityError
         mock_commit.side_effect = IntegrityError(None, None, Exception())
         
         with pytest.raises(HTTPException) as exc_info:
@@ -142,7 +144,6 @@ async def test_product_update_integrity_error(db: AsyncSession, product: Product
     """Test product update when DB integrity error occurs."""
     update_data = ProductUpdate(price=199.99)
     with patch("sqlalchemy.ext.asyncio.AsyncSession.commit") as mock_commit:
-        from sqlalchemy.exc import IntegrityError
         mock_commit.side_effect = IntegrityError(None, None, Exception())
         
         with pytest.raises(HTTPException) as exc_info:

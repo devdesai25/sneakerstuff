@@ -1,32 +1,31 @@
-from fastapi import Depends, HTTPException
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from backend.models.products import Product
-from backend.models.users import User
+from backend.helpers.product_helpers import get_product_or_404
 from backend.models.drops import Drop
 from backend.models.product_sizes import ProductSize
-from backend.schemas.product import ProductCreate, ProductUpdate, ProductResponse
-from backend.helpers.product_helpers import get_product_or_404
-
+from backend.models.products import Product
+from backend.models.users import User
+from backend.schemas.product import ProductCreate, ProductResponse, ProductUpdate
 from backend.services.redis_service import invalidate_cache
+
 
 async def product_add(
     new_product: ProductCreate, 
     admin: User,
     db: AsyncSession
 ) -> ProductResponse:
-    """Create a new product with duplicate check"""
+    """Create a new product with duplicate check and associated sizes in a single transaction."""
     product = (
         await db.execute(
-            select(Product)
-            .where(Product.name == new_product.name)
+            select(Product).where(Product.name == new_product.name)
         )
     ).scalar_one_or_none()
 
-    if product :
+    if product:
         raise HTTPException(
             status_code=409,
             detail="Duplicate Value Inserted"
@@ -37,20 +36,19 @@ async def product_add(
         stock = sum(size.stock for size in new_product.sizes)
 
     add_prod = Product(
-        name = new_product.name, 
-        description = new_product.description, 
-        price = new_product.price, 
-        stock = stock, 
-        created_by = admin.id,
-        images = new_product.images,
-        is_reserved_for_drop = getattr(new_product, 'is_reserved_for_drop', False),
-        is_visible = getattr(new_product, 'is_visible', True)
+        name=new_product.name, 
+        description=new_product.description, 
+        price=new_product.price, 
+        stock=stock, 
+        created_by=admin.id,
+        images=new_product.images,
+        is_reserved_for_drop=getattr(new_product, 'is_reserved_for_drop', False),
+        is_visible=getattr(new_product, 'is_visible', True)
     ) 
     
     try:
         db.add(add_prod)
-        await db.commit()
-        await db.refresh(add_prod)
+        await db.flush()
 
         if hasattr(new_product, 'sizes') and new_product.sizes:
             for size_data in new_product.sizes:
@@ -60,9 +58,11 @@ async def product_add(
                     stock=size_data.stock
                 )
                 db.add(new_size)
-            await db.commit()
+            await db.flush()
 
-        # load sizes for response
+        await db.commit()
+
+        # Load product with sizes for response serialization
         stmt = select(Product).options(selectinload(Product.sizes)).where(Product.product_id == add_prod.product_id)
         result = await db.execute(stmt)
         add_prod = result.scalar_one()
@@ -73,29 +73,33 @@ async def product_add(
     except IntegrityError:
         await db.rollback()
         raise HTTPException(
-            409,
+            status_code=409,
             detail="Database Integrity Error"
         )
     except Exception:
         await db.rollback()
         raise
+
     return add_prod
+
 
 async def product_delete(
     product_id: int, 
     db: AsyncSession
-) -> dict :
-    """Delete a product"""
+) -> dict:
+    """Delete a product after validating no active drop references it."""
     product = await get_product_or_404(product_id, db)
     
-    drop = (
+    # Check drop existence with limit(1) instead of fetching all records
+    drop_exists = (
         await db.execute(
-            select(Drop)
+            select(Drop.drop_id)
             .where(Drop.product_id == product.product_id)
+            .limit(1)
         )
-    ).scalars().all()
+    ).scalar_one_or_none()
 
-    if drop:
+    if drop_exists:
         raise HTTPException(
             status_code=409,
             detail="Cannot delete a product that is used in a drop"
@@ -114,33 +118,30 @@ async def product_delete(
             status_code=409,
             detail="Database Integrity Error"
         )
-    
     except Exception:
         await db.rollback()
         raise
+
     return {
         "message": "Product deleted successfully"
     }
+
 
 async def product_update(
     product_id: int, 
     update_product: ProductUpdate, 
     db: AsyncSession
 ) -> ProductResponse:
-    """Update a product"""
+    """Update product fields and sizes atomically."""
     product = await get_product_or_404(product_id, db)
 
-    """Skip fields client hasnt sent"""
-    """Convert Pydantic model to dict, only with fields client sent"""
     update_data = update_product.model_dump(exclude_unset=True)
-
     sizes_data = update_data.pop('sizes', None)
 
     for key, value in update_data.items():
-            setattr(product, key, value)
+        setattr(product, key, value)
             
     if sizes_data is not None:
-        from sqlalchemy import delete
         await db.execute(delete(ProductSize).where(ProductSize.product_id == product_id))
         
         new_stock = 0
@@ -172,7 +173,6 @@ async def product_update(
             status_code=409,
             detail="Database Integrity Error"
         )
-    
     except Exception:
         await db.rollback()
         raise

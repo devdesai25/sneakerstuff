@@ -8,6 +8,8 @@ from backend.tasks.drop_tasks import (
 )
 from backend.models.drops import Drop
 from backend.models.entry import Entry
+from backend.models.order import Order
+from backend.models.reservations import Reservation
 from backend.models.users import User
 from backend.enums.drop_status import DropStatus
 from backend.schemas.entry import EntryRequest
@@ -104,9 +106,6 @@ async def test_select_winners_success(db: AsyncSession, drop: Drop, user: User, 
     # Inventory should be reduced by 1
     assert updated_drop.drop_inventory == 0
     # A reservation and order should be created
-    from backend.models.reservations import Reservation
-    from backend.models.order import Order
-    
     reservation = (
         await db.execute(select(Reservation).where(Reservation.entry_id == db_entry.entry_id))
     ).scalar_one_or_none()

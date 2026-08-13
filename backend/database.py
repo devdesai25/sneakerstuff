@@ -32,15 +32,4 @@ AsyncSessionLocal = async_sessionmaker(bind = engine, autocommit=False, expire_o
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
-
-"""
-def get_db():
-    
-    db = SessionLocal()
-
-    try:
-        yield db
-    finally:
-        db.close()
-        
-""" 
+ 

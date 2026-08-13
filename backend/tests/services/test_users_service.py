@@ -1,14 +1,15 @@
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from unittest.mock import patch, MagicMock
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.services.users import signup_service, login_service
-from backend.schemas.users import UserSignup
-from backend.models.users import User
 from backend.auth.jwt import verify
+from backend.models.users import User
+from backend.schemas.users import UserSignup
+from backend.services.users import login_service, signup_service
 
 @pytest.mark.asyncio
 async def test_signup_service_success(db: AsyncSession):
@@ -75,9 +76,6 @@ async def test_signup_service_integrity_error(db: AsyncSession):
         password="securepassword123"
     )
     
-    from unittest.mock import AsyncMock, patch
-    from sqlalchemy.exc import IntegrityError
-
     with patch.object(db, "commit", AsyncMock(side_effect=IntegrityError("", "", ""))):
         with pytest.raises(HTTPException) as exc_info:
             await signup_service(user=user_data, db=db)
